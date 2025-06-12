@@ -1,21 +1,28 @@
-# API Helper Extension
+# Pathfinder - OpenAPI Explorer
 
-A VS Code extension to assist developers working with REST APIs that provide OpenAPI (Swagger) schemas. This project serves as both a useful tool and an educational resource for learning VS Code extension development.
+A VS Code extension that acts as your compass for navigating REST APIs with OpenAPI (Swagger) specifications. Pathfinder helps developers explore, test, and generate code for APIs with intelligent platform detection and environment management.
 
-As a model use-case, I personally would like to be able to load the openapi schema for Kibana, then in a ui element browse through the available api commands.
-I work with a number of different Kibana instances so I'd like to be able to setup a number of APi environments, with a base API url (https://kibana.apac-test-1.sand.wtg.zone,https://kibana.emea-test-1.sand.wtg.zone etc), each with their own credentials or API key. Then when browsing through the commands have an option to generate a command with the example body (if any) in an editor window.
-In the editor window we should be able to have autocompletion for the valid parameters and basic type checking.
-It would be especially cool if we can choose to generate the command in differint formats (curl, Ansible uri, Powershell, maybe others if do-able.)
-As a sort of bonus goal it would be even better if we could execute the command and return the results in vscode also,, but this is a nice to have.
+Originally designed to streamline work with Kibana APIs across multiple environments, Pathfinder has evolved into a comprehensive OpenAPI exploration tool that adapts to your workflow.
 
-## 🎯 Purpose
+## 🧭 What Makes Pathfinder Special
+
+Pathfinder goes beyond simple API browsing by providing:
+- **Smart Platform Detection**: Automatically detects Kibana, Elasticsearch, and other API platforms
+- **Multi-Environment Support**: Manage multiple API environments with different base URLs and credentials
+- **Intelligent Code Generation**: Generate requests in multiple formats (cURL, Ansible, PowerShell, and more)
+- **In-Editor Testing**: Execute API calls and view results directly in VS Code
+- **Auto-completion**: IntelliSense for API parameters with type checking
+- **Schema Validation**: Load and validate OpenAPI/Swagger specifications
+
+## 🎯 Use Cases
 
 This extension helps developers:
-- Load and validate OpenAPI/Swagger specifications
-- Generate TypeScript interfaces from API schemas
-- Test API endpoints directly from VS Code
-- Browse API documentation within the editor
-- Generate client code snippets
+- **Explore APIs**: Browse through API endpoints with rich documentation
+- **Multi-Environment Management**: Work with multiple Kibana/API instances seamlessly
+- **Generate Code**: Create ready-to-use code snippets in various formats
+- **Test Endpoints**: Execute API calls without leaving your editor
+- **Validate Schemas**: Ensure OpenAPI specifications are correct
+- **Learn APIs**: Understand API structures through interactive exploration
 
 ## 🎓 Educational Goals
 
@@ -46,9 +53,12 @@ This project is designed as a learning experience for developers who:
 ## 📁 Project Structure
 
 ```
-api-helper-extension/
+pathfinder-openapi-explorer/
 ├── src/                          # Source TypeScript files
 │   ├── extension.ts              # Main extension entry point
+│   ├── tree-provider.ts          # API explorer tree view
+│   ├── tree-commands.ts          # Tree interaction commands
+│   ├── configuration.ts          # Settings management
 │   └── test/
 │       └── extension.test.ts     # Unit tests
 ├── dist/                         # Compiled JavaScript output
@@ -57,7 +67,7 @@ api-helper-extension/
 ├── tsconfig.json                 # TypeScript compiler configuration
 ├── eslint.config.mjs             # ESLint code quality rules
 ├── esbuild.js                    # Build tool configuration
-└── AGENT_INSTRUCTIONS.md         # Development progress tracker
+└── README.md                     # Project documentation
 ```
 
 ## 🚀 Getting Started
@@ -92,7 +102,7 @@ api-helper-extension/
 5. **Test the extension**:
    - Press `F5` in VS Code to open a new Extension Development Host window
    - In the new window, press `Ctrl+Shift+P` to open the command palette
-   - Type "API Helper" to see available commands
+   - Type "Pathfinder" to see available commands
 
 ## 📚 Key Concepts Explained
 
@@ -151,12 +161,18 @@ The extension uses **esbuild** for fast compilation:
 
 ## 📦 Available Commands
 
-Once installed, the extension provides these commands (accessible via `Ctrl+Shift+P`):
+Once installed, Pathfinder provides these commands (accessible via `Ctrl+Shift+P`):
 
-- **Hello World**: Simple test command
-- **Load OpenAPI Schema**: Parse an OpenAPI specification file
-- **Validate Schema**: Check if an OpenAPI schema is valid
-- **Generate API Client**: Create TypeScript code for API calls
+- **Pathfinder: Hello World**: Simple test command
+- **Pathfinder: Add API Environment**: Add a new API environment configuration
+- **Pathfinder: List API Environments**: View all configured API environments
+- **Pathfinder: Delete API Environment**: Remove an API environment
+- **Pathfinder: Load Schema from URL**: Parse an OpenAPI specification from a URL
+- **Pathfinder: Load Schema from File**: Parse an OpenAPI specification from a local file
+- **Pathfinder: Generate Client Code**: Create code snippets for API calls
+- **Pathfinder: Test API Endpoint**: Execute API calls and view results
+- **Pathfinder: Validate Schema**: Check if an OpenAPI schema is valid
+- **Pathfinder: Refresh Explorer**: Refresh the API explorer tree view
 
 ## 🤝 Contributing
 
@@ -168,9 +184,15 @@ This is an educational project! Contributions that help with learning are welcom
 
 ## 📝 License
 
-MIT License - feel e to use this code for learning and building your own extensions.
+MIT License - feel free to use this code for learning and building your own extensions.
 
 ## 🔗 Useful Resources
+
+- [VS Code Extension API Documentation](https://code.visualstudio.com/api)
+- [OpenAPI Specification](https://swagger.io/specification/)
+- [TypeScript Handbook](https://www.typescriptlang.org/docs/)
+- [Mocha Testing Framework](https://mochajs.org/)
+- [ESBuild Documentation](https://esbuild.github.io/)
 
 - [VS Code Extension API](https://code.visualstudio.com/api)
 - [TypeScript Handbook](https://www.typescriptlang.org/docs/)

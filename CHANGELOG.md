@@ -1,8 +1,32 @@
 # Change Log
 
-All notable changes to the "api-helper-extension" extension will be documented in this file.
+All notable changes to the "Pathfinder - OpenAPI Explorer" extension will be documented in this file.
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
+
+## [0.1.0] - 2024-12-20 - Major Rebrand: Pathfinder - OpenAPI Explorer
+
+### 🚀 **Complete Rebranding**
+- **Extension renamed** from "API Helper Extension" to "Pathfinder - OpenAPI Explorer"
+- **All command IDs updated** from `api-helper-extension.*` to `pathfinder.*`
+- **Tree view rebranded** from `apiHelperExplorer` to `pathfinderExplorer`
+- **Configuration namespace** changed from `apiHelper.*` to `pathfinder.*`
+- **Command categories** updated to "Pathfinder" throughout
+- **Enhanced description** emphasizing exploration and platform detection
+- **Updated keywords** for better discoverability (openapi, swagger, rest, api, testing, explorer, kibana, elasticsearch)
+
+### 📦 **Package Improvements**
+- **Version bumped** to 0.1.0 to reflect major rebrand
+- **Publisher field** added for extension marketplace
+- **Repository information** added to package.json
+- **MIT License** added for open source compliance
+- **Comprehensive README** updated with new branding and enhanced documentation
+
+### 🧪 **Testing & Quality**
+- **All tests updated** to reflect new command IDs and branding
+- **Extension compiles cleanly** with new naming conventions
+- **Successful packaging** with updated metadata
+- **Maintained backward compatibility** for core functionality
 
 ## [0.0.2] - 2024-12-20 - Kibana Enhancement & Tree View Improvements
 

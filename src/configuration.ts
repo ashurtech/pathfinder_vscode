@@ -163,9 +163,8 @@ export class ConfigurationManager {
     /**
      * Get extension settings with default values
      * Uses VS Code's configuration system (shows up in Settings UI)
-     */
-    getExtensionSettings(): ExtensionSettings {
-        const config = vscode.workspace.getConfiguration('apiHelper');
+     */    getExtensionSettings(): ExtensionSettings {
+        const config = vscode.workspace.getConfiguration('pathfinder');
         
         return {
             requestTimeout: config.get('requestTimeout', 30000), // 30 seconds default
@@ -180,9 +179,8 @@ export class ConfigurationManager {
      * @param key The setting key
      * @param value The new value
      * @param target Where to save (global or workspace)
-     */
-    async updateSetting(key: keyof ExtensionSettings, value: any, target: vscode.ConfigurationTarget = vscode.ConfigurationTarget.Global): Promise<void> {
-        const config = vscode.workspace.getConfiguration('apiHelper');
+     */    async updateSetting(key: keyof ExtensionSettings, value: any, target: vscode.ConfigurationTarget = vscode.ConfigurationTarget.Global): Promise<void> {
+        const config = vscode.workspace.getConfiguration('pathfinder');
         await config.update(key, value, target);
     }
     

@@ -1,106 +1,123 @@
 {
-  "name": "api-helper-extension",
-  "displayName": "API Helper Extension",
-  "description": "VS Code extension for REST API development with OpenAPI schema support",
-  "version": "0.0.1",
+  "name": "pathfinder-openapi-explorer",
+  "displayName": "Pathfinder - OpenAPI Explorer",
+  "description": "Explore, test, and generate code for OpenAPI/REST APIs with intelligent platform detection",
+  "version": "0.1.0",
+  "publisher": "pathfinder",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pathfinder/openapi-explorer.git"
+  },
   "engines": {
     "vscode": "^1.100.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Testing",
+    "Snippets"
+  ],
+  "keywords": [
+    "openapi",
+    "swagger",
+    "rest",
+    "api",
+    "testing",
+    "explorer",
+    "kibana",
+    "elasticsearch"
   ],
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "api-helper-extension.helloWorld",
+        "command": "pathfinder.helloWorld",
         "title": "Hello World",
-        "category": "API Helper"
+        "category": "Pathfinder"
       },
       {
-        "command": "api-helper-extension.addEnvironment",
+        "command": "pathfinder.addEnvironment",
         "title": "Add API Environment",
-        "category": "API Helper"
+        "category": "Pathfinder"
       },
       {
-        "command": "api-helper-extension.listEnvironments",
+        "command": "pathfinder.listEnvironments",
         "title": "List API Environments",
-        "category": "API Helper"
+        "category": "Pathfinder"
       },
       {
-        "command": "api-helper-extension.deleteEnvironment",
+        "command": "pathfinder.deleteEnvironment",
         "title": "Delete API Environment",
-        "category": "API Helper"
+        "category": "Pathfinder"
       },
       {
-        "command": "api-helper-extension.loadSchemaFromUrl",
+        "command": "pathfinder.loadSchemaFromUrl",
         "title": "Load Schema from URL",
-        "category": "API Helper"
+        "category": "Pathfinder"
       },
       {
-        "command": "api-helper-extension.loadSchemaFromFile",
+        "command": "pathfinder.loadSchemaFromFile",
         "title": "Load Schema from File",
-        "category": "API Helper"
+        "category": "Pathfinder"
       },
       {
-        "command": "api-helper-extension.showSchemaInfo",
+        "command": "pathfinder.showSchemaInfo",
         "title": "Show Schema Information",
-        "category": "API Helper"
+        "category": "Pathfinder"
       },
       {
-        "command": "api-helper-extension.showStorageStats",
+        "command": "pathfinder.showStorageStats",
         "title": "Show Storage Statistics",
-        "category": "API Helper"
+        "category": "Pathfinder"
       },
       {
-        "command": "api-helper-extension.refreshTree",
+        "command": "pathfinder.refreshTree",
         "title": "Refresh",
         "icon": "$(refresh)",
-        "category": "API Helper"
+        "category": "Pathfinder"
       },
       {
-        "command": "api-helper-extension.showEnvironmentDetails",
+        "command": "pathfinder.showEnvironmentDetails",
         "title": "Show Environment Details",
-        "category": "API Helper"
+        "category": "Pathfinder"
       },
       {
-        "command": "api-helper-extension.showSchemaDetails",
+        "command": "pathfinder.showSchemaDetails",
         "title": "Show Schema Details",
-        "category": "API Helper"
+        "category": "Pathfinder"
       },
       {
-        "command": "api-helper-extension.showEndpointDetails",
+        "command": "pathfinder.showEndpointDetails",
         "title": "Show Endpoint Details",
-        "category": "API Helper"
+        "category": "Pathfinder"
       },
       {
-        "command": "api-helper-extension.generateCodeForEndpoint",
+        "command": "pathfinder.generateCodeForEndpoint",
         "title": "Generate Code",
         "icon": "$(code)",
-        "category": "API Helper"
+        "category": "Pathfinder"
       }
     ],
     "configuration": {
-      "title": "API Helper",
+      "title": "Pathfinder - OpenAPI Explorer",
       "properties": {
-        "apiHelper.requestTimeout": {
+        "pathfinder.requestTimeout": {
           "type": "number",
           "default": 30000,
           "description": "Default timeout for API requests in milliseconds"
         },
-        "apiHelper.defaultCodeFormat": {
+        "pathfinder.defaultCodeFormat": {
           "type": "string",
           "enum": ["curl", "ansible", "powershell", "javascript", "python"],
           "default": "curl",
           "description": "Default format for generated code snippets"
         },
-        "apiHelper.autoValidateSchemas": {
+        "pathfinder.autoValidateSchemas": {
           "type": "boolean",
           "default": true,
           "description": "Automatically validate OpenAPI schemas when loaded"
         },
-        "apiHelper.maxHistoryItems": {
+        "pathfinder.maxHistoryItems": {
           "type": "number",
           "default": 50,
           "description": "Maximum number of request history items to keep"
@@ -110,8 +127,8 @@
     "views": {
       "explorer": [
         {
-          "id": "apiHelperExplorer",
-          "name": "API Helper",
+          "id": "pathfinderExplorer",
+          "name": "Pathfinder",
           "when": "true"
         }
       ]
@@ -119,25 +136,25 @@
     "menus": {
       "view/title": [
         {
-          "command": "api-helper-extension.refreshTree",
-          "when": "view == apiHelperExplorer",
+          "command": "pathfinder.refreshTree",
+          "when": "view == pathfinderExplorer",
           "group": "navigation"
         },
         {
-          "command": "api-helper-extension.addEnvironment",
-          "when": "view == apiHelperExplorer",
+          "command": "pathfinder.addEnvironment",
+          "when": "view == pathfinderExplorer",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
-          "command": "api-helper-extension.generateCodeForEndpoint",
-          "when": "view == apiHelperExplorer && viewItem == endpoint",
+          "command": "pathfinder.generateCodeForEndpoint",
+          "when": "view == pathfinderExplorer && viewItem == endpoint",
           "group": "inline"
         },
         {
-          "command": "api-helper-extension.deleteEnvironment",
-          "when": "view == apiHelperExplorer && viewItem == environment",
+          "command": "pathfinder.deleteEnvironment",
+          "when": "view == pathfinderExplorer && viewItem == environment",
           "group": "management"
         }
       ]

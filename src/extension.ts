@@ -33,7 +33,7 @@ let treeProvider: ApiTreeProvider;
  * VS Code calls this when the extension is first needed
  */
 export function activate(context: vscode.ExtensionContext) {
-    console.log('🚀 API Helper Extension is starting up!');
+    console.log('🚀 Pathfinder - OpenAPI Explorer is starting up!');
     
     // Initialize our core services
     configManager = new ConfigurationManager(context);
@@ -41,7 +41,7 @@ export function activate(context: vscode.ExtensionContext) {
     treeProvider = new ApiTreeProvider(configManager, schemaLoader);
     
     // Register the tree view
-    const treeView = vscode.window.createTreeView('apiHelperExplorer', {
+    const treeView = vscode.window.createTreeView('pathfinderExplorer', {
         treeDataProvider: treeProvider,
         showCollapseAll: true
     });
@@ -55,7 +55,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Add tree view to subscriptions
     context.subscriptions.push(treeView);
     
-    console.log('✅ API Helper Extension is now active!');
+    console.log('✅ Pathfinder - OpenAPI Explorer is now active!');
 }
 
 /**
@@ -68,8 +68,8 @@ function registerCommands(context: vscode.ExtensionContext) {
     // Test Commands
     // ========================
     
-    const helloWorldCommand = vscode.commands.registerCommand('api-helper-extension.helloWorld', () => {
-        vscode.window.showInformationMessage('Hello World from API Helper Extension!');
+    const helloWorldCommand = vscode.commands.registerCommand('pathfinder.helloWorld', () => {
+        vscode.window.showInformationMessage('Hello World from Pathfinder - OpenAPI Explorer!');
     });
     
     // ========================
@@ -77,17 +77,17 @@ function registerCommands(context: vscode.ExtensionContext) {
     // ========================
     
     const addEnvironmentCommand = vscode.commands.registerCommand(
-        'api-helper-extension.addEnvironment', 
+        'pathfinder.addEnvironment', 
         addApiEnvironmentHandler
     );
     
     const listEnvironmentsCommand = vscode.commands.registerCommand(
-        'api-helper-extension.listEnvironments', 
+        'pathfinder.listEnvironments', 
         listApiEnvironmentsHandler
     );
     
     const deleteEnvironmentCommand = vscode.commands.registerCommand(
-        'api-helper-extension.deleteEnvironment', 
+        'pathfinder.deleteEnvironment', 
         deleteApiEnvironmentHandler
     );
 
@@ -96,17 +96,17 @@ function registerCommands(context: vscode.ExtensionContext) {
     // ========================
     
     const showLoadSchemaOptionsCmd = vscode.commands.registerCommand(
-        'api-helper-extension.showLoadSchemaOptions',
+        'pathfinder.showLoadSchemaOptions',
         (environment: ApiEnvironment) => showLoadSchemaOptionsCommand(environment)
     );
     
     const editEnvironmentCmd = vscode.commands.registerCommand(
-        'api-helper-extension.editEnvironment',
+        'pathfinder.editEnvironment',
         (environment: ApiEnvironment) => editEnvironmentCommand(environment, configManager)
     );
     
     const duplicateEnvironmentCmd = vscode.commands.registerCommand(
-        'api-helper-extension.duplicateEnvironment', 
+        'pathfinder.duplicateEnvironment', 
         (environment: ApiEnvironment) => duplicateEnvironmentCommand(environment, configManager)
     );
     
@@ -115,17 +115,17 @@ function registerCommands(context: vscode.ExtensionContext) {
     // ========================
     
     const loadSchemaFromUrlCommand = vscode.commands.registerCommand(
-        'api-helper-extension.loadSchemaFromUrl', 
+        'pathfinder.loadSchemaFromUrl', 
         loadSchemaFromUrlHandler
     );
     
     const loadSchemaFromFileCommand = vscode.commands.registerCommand(
-        'api-helper-extension.loadSchemaFromFile', 
+        'pathfinder.loadSchemaFromFile', 
         loadSchemaFromFileHandler
     );
     
     const showSchemaInfoCommand = vscode.commands.registerCommand(
-        'api-helper-extension.showSchemaInfo', 
+        'pathfinder.showSchemaInfo', 
         showSchemaInfoHandler
     );
     
@@ -134,7 +134,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     // ========================
     
     const showStorageStatsCommand = vscode.commands.registerCommand(
-        'api-helper-extension.showStorageStats', 
+        'pathfinder.showStorageStats', 
         showStorageStatsHandler
     );
     
@@ -164,22 +164,22 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
     // ========================
     
     const showEnvironmentDetailsCmd = vscode.commands.registerCommand(
-        'api-helper-extension.showEnvironmentDetails',
+        'pathfinder.showEnvironmentDetails',
         showEnvironmentDetailsCommand
     );
     
     const showSchemaDetailsCmd = vscode.commands.registerCommand(
-        'api-helper-extension.showSchemaDetails',
+        'pathfinder.showSchemaDetails',
         showSchemaDetailsCommand
     );
     
     const showEndpointDetailsCmd = vscode.commands.registerCommand(
-        'api-helper-extension.showEndpointDetails',
+        'pathfinder.showEndpointDetails',
         showEndpointDetailsCommand
     );
     
     const generateCodeCmd = vscode.commands.registerCommand(
-        'api-helper-extension.generateCodeForEndpoint',
+        'pathfinder.generateCodeForEndpoint',
         generateCodeForEndpointCommand
     );
     
@@ -188,32 +188,32 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
     // ========================
     
     const generateCurlCmd = vscode.commands.registerCommand(
-        'api-helper-extension.generateCurl',
+        'pathfinder.generateCurl',
         (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'curl')
     );
     
     const generateAnsibleCmd = vscode.commands.registerCommand(
-        'api-helper-extension.generateAnsible',
+        'pathfinder.generateAnsible',
         (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'ansible')
     );
     
     const generatePowerShellCmd = vscode.commands.registerCommand(
-        'api-helper-extension.generatePowerShell',
+        'pathfinder.generatePowerShell',
         (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'powershell')
     );
     
     const generatePythonCmd = vscode.commands.registerCommand(
-        'api-helper-extension.generatePython',
+        'pathfinder.generatePython',
         (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'python')
     );
     
     const generateJavaScriptCmd = vscode.commands.registerCommand(
-        'api-helper-extension.generateJavaScript',
+        'pathfinder.generateJavaScript',
         (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'javascript')
     );
     
     const testEndpointCmd = vscode.commands.registerCommand(
-        'api-helper-extension.testEndpoint',
+        'pathfinder.testEndpoint',
         testEndpointCommand
     );
     
@@ -222,7 +222,7 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
     // ========================
     
     const refreshTreeCmd = vscode.commands.registerCommand(
-        'api-helper-extension.refreshTree',
+        'pathfinder.refreshTree',
         () => treeProvider.refresh()
     );
     
@@ -721,5 +721,5 @@ async function showStorageStatsHandler() {
  * Use this to clean up any resources
  */
 export function deactivate() {
-    console.log('👋 API Helper Extension is shutting down');
+    console.log('👋 Pathfinder - OpenAPI Explorer is shutting down');
 }

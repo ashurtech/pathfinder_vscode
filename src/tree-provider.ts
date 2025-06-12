@@ -183,49 +183,49 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             new EndpointActionTreeItem(
                 '📋 View Full Details',
                 'Show complete endpoint information',
-                'api-helper-extension.showEndpointDetails',
+                'pathfinder.showEndpointDetails',
                 'info',
                 [endpoint, schemaItem]
             ),
             new EndpointActionTreeItem(
                 '💻 Generate cURL',
                 'Generate cURL command for this endpoint',
-                'api-helper-extension.generateCurl',
+                'pathfinder.generateCurl',
                 'terminal',
                 [endpoint, schemaItem]
             ),
             new EndpointActionTreeItem(
                 '🔧 Generate Ansible',
                 'Generate Ansible task for this endpoint',
-                'api-helper-extension.generateAnsible',
+                'pathfinder.generateAnsible',
                 'settings-gear',
                 [endpoint, schemaItem]
             ),
             new EndpointActionTreeItem(
                 '⚡ Generate PowerShell',
                 'Generate PowerShell script for this endpoint',
-                'api-helper-extension.generatePowerShell',
+                'pathfinder.generatePowerShell',
                 'terminal-powershell',
                 [endpoint, schemaItem]
             ),
             new EndpointActionTreeItem(
                 '🐍 Generate Python',
                 'Generate Python requests code for this endpoint',
-                'api-helper-extension.generatePython',
+                'pathfinder.generatePython',
                 'symbol-method',
                 [endpoint, schemaItem]
             ),
             new EndpointActionTreeItem(
                 '📜 Generate JavaScript',
                 'Generate JavaScript fetch code for this endpoint',
-                'api-helper-extension.generateJavaScript',
+                'pathfinder.generateJavaScript',
                 'symbol-function',
                 [endpoint, schemaItem]
             ),
             new EndpointActionTreeItem(
                 '🧪 Test Endpoint',
                 'Execute a test request to this endpoint',
-                'api-helper-extension.testEndpoint',
+                'pathfinder.testEndpoint',
                 'beaker',
                 [endpoint, schemaItem]
             )
@@ -282,7 +282,7 @@ class EnvironmentTreeItem extends TreeItem {
         
         // Command to run when clicked (optional - shows environment details)
         this.command = {
-            command: 'api-helper-extension.showEnvironmentDetails',
+            command: 'pathfinder.showEnvironmentDetails',
             title: 'Show Environment Details',
             arguments: [environment]
         };
@@ -309,7 +309,7 @@ class SchemaTreeItem extends TreeItem {
         
         // Command to show schema details when clicked
         this.command = {
-            command: 'api-helper-extension.showSchemaDetails',
+            command: 'pathfinder.showSchemaDetails',
             title: 'Show Schema Details',
             arguments: [schema]
         };
@@ -432,7 +432,7 @@ class LoadSchemaActionTreeItem extends TreeItem {
         
         // Show submenu when clicked
         this.command = {
-            command: 'api-helper-extension.showLoadSchemaOptions',
+            command: 'pathfinder.showLoadSchemaOptions',
             title: 'Load Schema Options',
             arguments: [environment]
         };
@@ -451,7 +451,7 @@ class EditEnvironmentActionTreeItem extends TreeItem {
         this.contextValue = 'editEnvironmentAction';
         
         this.command = {
-            command: 'api-helper-extension.editEnvironment',
+            command: 'pathfinder.editEnvironment',
             title: 'Edit Environment',
             arguments: [environment]
         };
@@ -470,7 +470,7 @@ class DuplicateEnvironmentActionTreeItem extends TreeItem {
         this.contextValue = 'duplicateEnvironmentAction';
         
         this.command = {
-            command: 'api-helper-extension.duplicateEnvironment',
+            command: 'pathfinder.duplicateEnvironment',
             title: 'Duplicate Environment',
             arguments: [environment]
         };

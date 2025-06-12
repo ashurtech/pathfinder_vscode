@@ -557,9 +557,9 @@ export async function showLoadSchemaOptionsCommand(environment: ApiEnvironment) 
 
     if (choice) {
         if (choice.action === 'file') {
-            await vscode.commands.executeCommand('api-helper-extension.loadSchemaFromFile', environment);
+            await vscode.commands.executeCommand('pathfinder.loadSchemaFromFile', environment);
         } else {
-            await vscode.commands.executeCommand('api-helper-extension.loadSchemaFromUrl', environment);
+            await vscode.commands.executeCommand('pathfinder.loadSchemaFromUrl', environment);
         }
     }
 }
@@ -619,12 +619,11 @@ export async function editEnvironmentCommand(environment: ApiEnvironment, config
         description: description?.trim() ?? undefined
     };
     
-    try {
-        await configManager.saveApiEnvironment(updatedEnvironment);
+    try {        await configManager.saveApiEnvironment(updatedEnvironment);
         vscode.window.showInformationMessage(`Environment "${name}" updated successfully!`);
         
         // Refresh tree view
-        vscode.commands.executeCommand('api-helper-extension.refresh');
+        vscode.commands.executeCommand('pathfinder.refreshTree');
     } catch (error) {
         vscode.window.showErrorMessage(`Failed to update environment: ${error}`);
     }
@@ -661,12 +660,11 @@ export async function duplicateEnvironmentCommand(environment: ApiEnvironment, c
         lastUsed: undefined
     };
     
-    try {
-        await configManager.saveApiEnvironment(newEnvironment);
+    try {        await configManager.saveApiEnvironment(newEnvironment);
         vscode.window.showInformationMessage(`Environment "${name}" created successfully!`);
         
         // Refresh tree view
-        vscode.commands.executeCommand('api-helper-extension.refresh');
+        vscode.commands.executeCommand('pathfinder.refreshTree');
     } catch (error) {
         vscode.window.showErrorMessage(`Failed to duplicate environment: ${error}`);
     }
