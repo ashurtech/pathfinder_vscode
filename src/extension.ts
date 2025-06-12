@@ -21,7 +21,8 @@ import {
     testEndpointCommand,
     showLoadSchemaOptionsCommand,
     editEnvironmentCommand,
-    duplicateEnvironmentCommand
+    duplicateEnvironmentCommand,
+    confirmDeleteAction
 } from './tree-commands';
 import { ApiEnvironment, EndpointInfo } from './types';
 
@@ -530,23 +531,16 @@ async function deleteApiEnvironmentHandler() {
         });
         
         if (selected) {
-            // Confirm deletion
-            const confirmed = await vscode.window.showWarningMessage(
-                `Are you sure you want to delete "${selected.environment.name}"?`,
-                'Delete',
-                'Cancel'
+            // Use session-based confirmation dialog
+            const confirmed = await confirmDeleteAction(
+                `Are you sure you want to delete "${selected.environment.name}"?`
             );
-            
-            if (confirmed === 'Delete') {
+            if (confirmed) {
                 await configManager.deleteApiEnvironment(selected.environment.id);
-                
-                // Refresh tree view to remove deleted environment
                 treeProvider.refresh();
-                
                 vscode.window.showInformationMessage(`Environment "${selected.environment.name}" has been deleted.`);
             }
         }
-        
     } catch (error) {
         console.error('Failed to delete environment:', error);
         vscode.window.showErrorMessage(`Failed to delete environment: ${error}`);
@@ -923,18 +917,15 @@ async function editGroupHandler(group: any) {
  */
 async function deleteGroupHandler(group: any) {
     try {
-        const confirm = await vscode.window.showWarningMessage(
-            `Delete group "${group.name}"? Environments will be moved out of the group.`,
-            { modal: true },
-            'Delete Group'
+        // Use session-based confirmation dialog
+        const confirmed = await confirmDeleteAction(
+            `Delete group "${group.name}"? Environments will be moved out of the group.`
         );
-        
-        if (confirm === 'Delete Group') {
+        if (confirmed) {
             await configManager.deleteEnvironmentGroup(group.id);
             treeProvider.refresh();
             vscode.window.showInformationMessage(`Group "${group.name}" deleted.`);
         }
-        
     } catch (error) {
         vscode.window.showErrorMessage(`Failed to delete group: ${error}`);
     }

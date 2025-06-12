@@ -434,8 +434,8 @@ class EnvironmentGroupTreeItem extends TreeItem {
     constructor(public readonly group: ApiEnvironmentGroup) {
         super(group.name, vscode.TreeItemCollapsibleState.Collapsed);
         
-        // Set icon with color theme
-        const iconColor = group.color ?? 'blue';
+        // Use colored folder icon
+        const iconColor = group.color ?? 'yellow';
         this.iconPath = new vscode.ThemeIcon('folder', new vscode.ThemeColor(`charts.${iconColor}`));
         this.tooltip = `${group.name}\n${group.description ?? 'No description'}\nCreated: ${group.createdAt.toLocaleString()}`;
         this.description = group.description;
@@ -459,8 +459,8 @@ class EnvironmentTreeItem extends TreeItem {
     constructor(public readonly environment: ApiEnvironment) {
         super(environment.name, vscode.TreeItemCollapsibleState.Collapsed);
         
-        // Set icon and context for the environment
-        this.iconPath = new vscode.ThemeIcon('server-environment');
+        // Use colored server icon
+        this.iconPath = new vscode.ThemeIcon('server-environment', new vscode.ThemeColor('charts.blue'));
         this.tooltip = `${environment.name}\n${environment.baseUrl}\nAuth: ${environment.auth.type}`;
         this.description = environment.baseUrl;
         
@@ -490,8 +490,8 @@ class SchemaTreeItem extends TreeItem {
         const info = new SchemaLoader().getSchemaInfo(schema.schema);
         super(`${info.title} v${info.version}`, vscode.TreeItemCollapsibleState.Collapsed);
         
-        // Set icon based on schema validity
-        this.iconPath = new vscode.ThemeIcon(schema.isValid ? 'file-code' : 'error');
+        // Use colored code icon for valid, red for invalid
+        this.iconPath = new vscode.ThemeIcon(schema.isValid ? 'file-code' : 'error', new vscode.ThemeColor(schema.isValid ? 'charts.green' : 'charts.red'));
         this.tooltip = `${info.title} v${info.version}\n${info.endpointCount} endpoints\nLoaded: ${schema.loadedAt.toLocaleString()}`;
         this.description = `${info.endpointCount} endpoints`;
         
@@ -516,8 +516,8 @@ class TagTreeItem extends TreeItem {
         public readonly schemaItem: SchemaTreeItem
     ) {
         super(tag, vscode.TreeItemCollapsibleState.Collapsed);
-        
-        this.iconPath = new vscode.ThemeIcon('tag');
+        // Use colored tag icon
+        this.iconPath = new vscode.ThemeIcon('tag', new vscode.ThemeColor('charts.orange'));
         this.tooltip = `Tag: ${tag}\n${endpoints.length} endpoints`;
         this.description = `${endpoints.length} endpoints`;
         this.contextValue = 'tag';
@@ -657,7 +657,7 @@ class LoadSchemaActionTreeItem extends TreeItem {
     constructor(public readonly environment: ApiEnvironment) {
         super('📂 Load Schema...', vscode.TreeItemCollapsibleState.None);
         
-        this.iconPath = new vscode.ThemeIcon('add');
+        this.iconPath = new vscode.ThemeIcon('folder', new vscode.ThemeColor('charts.yellow'));
         this.tooltip = 'Load a new OpenAPI schema into this environment';
         this.contextValue = 'loadSchemaAction';
         
@@ -677,7 +677,7 @@ class EditEnvironmentActionTreeItem extends TreeItem {
     constructor(public readonly environment: ApiEnvironment) {
         super('✏️ Edit Environment', vscode.TreeItemCollapsibleState.None);
         
-        this.iconPath = new vscode.ThemeIcon('edit');
+        this.iconPath = new vscode.ThemeIcon('edit', new vscode.ThemeColor('charts.orange'));
         this.tooltip = 'Edit this environment\'s settings';
         this.contextValue = 'editEnvironmentAction';
         
@@ -696,7 +696,7 @@ class DuplicateEnvironmentActionTreeItem extends TreeItem {
     constructor(public readonly environment: ApiEnvironment) {
         super('📋 Duplicate Environment', vscode.TreeItemCollapsibleState.None);
         
-        this.iconPath = new vscode.ThemeIcon('copy');
+        this.iconPath = new vscode.ThemeIcon('copy', new vscode.ThemeColor('charts.purple'));
         this.tooltip = 'Create a copy of this environment';
         this.contextValue = 'duplicateEnvironmentAction';
         

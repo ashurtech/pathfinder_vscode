@@ -10,6 +10,27 @@ import { ApiEnvironment, LoadedSchema, ApiEndpoint, RequestGeneratorConfig, PLAT
 import { SchemaLoader } from './schema-loader';
 import { ConfigurationManager } from './configuration';
 
+let skipDeleteConfirmation = false;
+
+/**
+ * Utility: Confirm before running a DELETE command, with option to skip for session
+ */
+export async function confirmDeleteAction(message: string): Promise<boolean> {
+    if (skipDeleteConfirmation) return true;
+    const result = await vscode.window.showWarningMessage(
+        message + '\nThis action cannot be undone.',
+        { modal: true },
+        'Delete',
+        "Don't ask again this session",
+        'Cancel'
+    );
+    if (result === "Don't ask again this session") {
+        skipDeleteConfirmation = true;
+        return true;
+    }
+    return result === 'Delete';
+}
+
 /**
  * Determine platform configuration for a schema/environment
  */
