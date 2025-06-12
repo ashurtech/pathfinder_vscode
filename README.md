@@ -4,6 +4,12 @@ A VS Code extension that acts as your compass for navigating REST APIs with Open
 
 Originally designed to streamline work with Kibana APIs across multiple environments, Pathfinder has evolved into a comprehensive OpenAPI exploration tool that adapts to your workflow.
 
+Works well with these openai api's;
+
+Kibana - https://www.elastic.co/docs/api/doc/kibana.json 
+& 
+Elasticsearch - https://www.elastic.co/docs/api/doc/elasticsearch.json
+
 ## 🧭 What Makes Pathfinder Special
 
 Pathfinder goes beyond simple API browsing by providing:

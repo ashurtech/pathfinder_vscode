@@ -19,6 +19,13 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 - **Password masking**: Authorization headers automatically masked with asterisks for security
 - **Eye icon toggle**: 👁️ Click to toggle visibility of sensitive tokens and API keys
+
+### 🔧 **HTTP Request Parsing Improvements**
+
+- **Enhanced request line detection**: Robust HTTP method and URL parsing prevents false matches
+- **Authorization header comment handling**: Proper parsing of headers with "👁️ Click to toggle visibility" comments
+- **Improved error logging**: Better debugging information for request parsing failures
+- **Protection against parsing conflicts**: Fixed issues where non-HTTP content could interfere with request detection
 - **Smart masking**: Shows first 4 characters followed by masked content (e.g., `Bear**********************`)
 - **CodeLens integration**: "👁️ Toggle Visibility" buttons appear next to masked auth headers
 - **Global toggle**: "🔒 Hide All Auth" / "🔓 Reveal All Auth" CodeLens at document top

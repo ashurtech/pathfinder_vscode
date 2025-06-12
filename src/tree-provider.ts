@@ -59,8 +59,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
             // Root level - return groups and ungrouped environments
             return this.getEnvironments();
         }
-        
-        // Handle different types of tree items
+          // Handle different types of tree items
         if (element instanceof EnvironmentGroupTreeItem) {
             return this.getGroupChildren(element);
         } else if (element instanceof EnvironmentTreeItem) {
@@ -71,6 +70,8 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
             return this.getTagChildren(element);
         } else if (element instanceof EndpointTreeItem) {
             return this.getEndpointChildren(element);
+        } else if (element instanceof GenerateCommandsFolderTreeItem) {
+            return this.getGenerateCommandsChildren(element);
         }
         
         return [];
@@ -289,9 +290,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
         return tagItem.endpoints.map(endpoint => 
             new EndpointTreeItem(endpoint, tagItem.schemaItem)
         );
-    }
-
-    /**
+    }    /**
      * Get children for an endpoint (action items like "View Details", "Generate cURL", etc.)
      */
     private getEndpointChildren(endpointItem: EndpointTreeItem): TreeItem[] {
@@ -306,6 +305,25 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 'info',
                 [endpoint, schemaItem]
             ),
+            new GenerateCommandsFolderTreeItem(endpoint, schemaItem),
+            new EndpointActionTreeItem(
+                '🚀 Run HTTP Request',
+                'Open HTTP request editor for this endpoint',
+                'pathfinder.runHttpRequest',
+                'play',
+                [endpoint, schemaItem]
+            )
+        ];
+    }
+
+    /**
+     * Get children for the generate commands folder
+     */
+    private getGenerateCommandsChildren(folderItem: GenerateCommandsFolderTreeItem): TreeItem[] {
+        const endpoint = folderItem.endpoint;
+        const schemaItem = folderItem.schemaItem;
+        
+        return [
             new EndpointActionTreeItem(
                 '💻 Generate cURL',
                 'Generate cURL command for this endpoint',
@@ -339,19 +357,6 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 'Generate JavaScript fetch code for this endpoint',
                 'pathfinder.generateJavaScript',
                 'symbol-function',
-                [endpoint, schemaItem]
-            ),            new EndpointActionTreeItem(
-                '🧪 Test Endpoint',
-                'Execute a test request to this endpoint',
-                'pathfinder.testEndpoint',
-                'beaker',
-                [endpoint, schemaItem]
-            ),
-            new EndpointActionTreeItem(
-                '🚀 Run HTTP Request',
-                'Open HTTP request editor for this endpoint',
-                'pathfinder.runHttpRequest',
-                'play',
                 [endpoint, schemaItem]
             )
         ];
@@ -581,6 +586,22 @@ class EndpointActionTreeItem extends TreeItem {
             title: actionLabel,
             arguments: commandArgs
         };
+    }
+}
+
+/**
+ * Tree item representing a folder that contains all the generate commands
+ */
+class GenerateCommandsFolderTreeItem extends TreeItem {
+    constructor(
+        public readonly endpoint: ApiEndpoint,
+        public readonly schemaItem: SchemaTreeItem
+    ) {
+        super('Generate commands >', vscode.TreeItemCollapsibleState.Collapsed);
+        
+        this.iconPath = new vscode.ThemeIcon('folder');
+        this.tooltip = 'Code generation commands for this endpoint';
+        this.contextValue = 'generateCommandsFolder';
     }
 }
 

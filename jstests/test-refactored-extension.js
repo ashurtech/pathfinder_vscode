@@ -76,9 +76,9 @@ async function testRefactoredExtension() {
         // Test 1: Import and initialize the components
         console.log('\n📦 Test 1: Loading refactored components...');
         
-        const { ConfigurationManager } = require('./src/configuration');
-        const { ApiTreeProvider } = require('./src/tree-provider');
-        const { PLATFORM_CONFIGS } = require('./src/types');
+        const { ConfigurationManager } = require('../src/configuration');
+        const { ApiTreeProvider } = require('../src/tree-provider');
+        const { PLATFORM_CONFIGS } = require('../src/types');
         const { 
             getPlatformConfig, 
             applyPlatformHeaders, 
@@ -86,7 +86,7 @@ async function testRefactoredExtension() {
             showLoadSchemaOptionsCommand,
             editEnvironmentCommand,
             duplicateEnvironmentCommand
-        } = require('./src/tree-commands');
+        } = require('../src/tree-commands');
         
         console.log('✅ All refactored components loaded successfully');
         

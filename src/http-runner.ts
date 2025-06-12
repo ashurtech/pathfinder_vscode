@@ -257,8 +257,7 @@ ${pathParams.map(p => `# ${p}: <value>`).join('\n') || '# No path parameters'}
 
     /**
      * Parse HTTP request from editor content
-     */
-    parseHttpRequest(content: string): HttpRequest | null {
+     */    parseHttpRequest(content: string): HttpRequest | null {
         try {
             const lines = content.split('\n').filter(line => !line.trim().startsWith('#') && line.trim());
             
@@ -266,11 +265,32 @@ ${pathParams.map(p => `# ${p}: <value>`).join('\n') || '# No path parameters'}
                 return null;
             }
 
+            // Find the first line that looks like an HTTP request (METHOD URL)
+            let requestLineIndex = -1;
+            let requestLine = '';
+            const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS', 'TRACE'];
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                const parts = line.split(' ');
+                
+                if (parts.length >= 2 && httpMethods.includes(parts[0].toUpperCase()) && parts[1].startsWith('http')) {
+                    requestLineIndex = i;
+                    requestLine = line;
+                    break;
+                }
+            }
+            
+            if (requestLineIndex === -1 || !requestLine) {
+                this.outputChannel.appendLine('No valid HTTP request line found');
+                return null;
+            }
+
             // Parse request line (method + URL)
-            const requestLine = lines[0].trim();
             const [method, fullUrl] = requestLine.split(' ', 2);
 
             if (!method || !fullUrl) {
+                this.outputChannel.appendLine(`Invalid request line format: ${requestLine}`);
                 return null;
             }
 
@@ -285,24 +305,27 @@ ${pathParams.map(p => `# ${p}: <value>`).join('\n') || '# No path parameters'}
                         queryParams[decodeURIComponent(key)] = decodeURIComponent(value);
                     }
                 });
-            }
-
-            // Parse headers
+            }            // Parse headers - start from the line after the request line
             const headers: Record<string, string> = {};
             let bodyStartIndex = -1;
 
-            for (let i = 1; i < lines.length; i++) {
+            for (let i = requestLineIndex + 1; i < lines.length; i++) {
                 const line = lines[i].trim();
                 
                 if (line === '' || line.startsWith('{') || line.startsWith('[')) {
                     bodyStartIndex = i;
                     break;
-                }
-
-                const colonIndex = line.indexOf(':');
+                }                const colonIndex = line.indexOf(':');
                 if (colonIndex > 0) {
                     const key = line.substring(0, colonIndex).trim();
-                    const value = line.substring(colonIndex + 1).trim();
+                    let value = line.substring(colonIndex + 1).trim();
+                    
+                    // Remove comments from header values (e.g., "Bearer token # 👁️ Click to toggle visibility")
+                    const commentIndex = value.indexOf('#');
+                    if (commentIndex > 0) {
+                        value = value.substring(0, commentIndex).trim();
+                    }
+                    
                     headers[key] = value;
                 }
             }

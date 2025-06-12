@@ -31,7 +31,7 @@ async function testCircularReferenceHandling() {
     
     try {
         // Import the SchemaLoader (after mocking vscode)
-        const { SchemaLoader } = require('./src/schema-loader');
+        const { SchemaLoader } = require('../src/schema-loader.js');
         
         const schemaLoader = new SchemaLoader();
         
@@ -138,7 +138,7 @@ async function testCircularReferenceHandling() {
             console.log('   ✅ Confirmed: circular schema fails normal serialization');
             
             // Now test our breakCircularReferences function
-            const { breakCircularReferences } = require('./dist/extension.js');
+            const { breakCircularReferences } = require('../dist/extension.js');
             // Since it's bundled, we'll test directly with our function
             
             // Create our own version for testing
