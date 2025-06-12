@@ -4,6 +4,61 @@ All notable changes to the "api-helper-extension" extension will be documented i
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.0.2] - 2024-12-20 - Kibana Enhancement & Tree View Improvements
+
+### 🎯 **Major UX Enhancement: Expandable Tree View**
+- **Replaced immediate endpoint details** with expandable action menus
+- **Endpoint nodes now expandable** (show ▶ collapsed arrow, expand to see actions)
+- **Professional action menu** with 7 organized options per endpoint
+- **Improved tree navigation** - no more overwhelming information on click
+
+### 🔧 **Multi-Format Code Generation** 
+- **Enhanced cURL generation** with proper line continuation and formatting
+- **Ansible task creation** with comprehensive YAML structure
+- **PowerShell scripts** with advanced error handling and SSL support
+- **Python requests code** with proper exception handling
+- **JavaScript fetch API** with modern Promise-based error handling
+- **All formats now production-ready** with professional formatting
+
+### 🚀 **Kibana-Specific Optimizations**
+- **Automatic Kibana detection** based on environment name/URL containing "kibana"
+- **`kbn-xsrf: true` header** automatically added across ALL formats for CSRF protection
+- **Proper API key format**: `Authorization: ApiKey <key>` instead of custom headers
+- **Enhanced PowerShell for Kibana**:
+  - SSL certificate handling for self-signed certificates
+  - Comprehensive error handling with response body capture
+  - Kibana-specific comments and configuration
+
+### 📋 **Endpoint Action Menu (7 Actions)**
+Each endpoint now expands to show:
+- **📋 View Full Details** - Complete endpoint documentation
+- **💻 Generate cURL** - Command-line ready with Kibana headers
+- **🔧 Generate Ansible** - Infrastructure automation with proper auth
+- **⚡ Generate PowerShell** - Enhanced Windows scripting
+- **🐍 Generate Python** - Modern requests library usage
+- **📜 Generate JavaScript** - Fetch API with error handling
+- **🧪 Test Endpoint** - Future live testing capability
+
+### 🛠️ **Technical Improvements**
+- **Reduced cognitive complexity** in PowerShell generation (refactored from 21 to <15)
+- **Modular code structure** with separate functions for each concern
+- **Enhanced error handling** across all generators
+- **Environment detection logic** for platform-specific optimizations
+- **Comprehensive TypeScript interfaces** for better type safety
+
+### 🎨 **User Experience Enhancements**
+- **Icons for each action type** making actions easily identifiable
+- **Consistent formatting** across all generated code formats
+- **Professional code output** with proper comments and documentation
+- **Contextual help** with parameter suggestions from endpoint schemas
+- **Clean tree structure** that scales well with large APIs
+
+### ✅ **Quality Assurance**
+- **Zero compilation errors** - extension builds cleanly
+- **ESLint compliance** with modern TypeScript standards
+- **Comprehensive testing** with detailed test guide
+- **Production-ready code generation** for all supported formats
+
 ## [Unreleased]
 
 ### Added
