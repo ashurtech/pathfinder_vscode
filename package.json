@@ -96,6 +96,42 @@
         "title": "Generate Code",
         "icon": "$(code)",
         "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.addEnvironmentGroup",
+        "title": "Add Environment Group",
+        "icon": "$(folder-opened)",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.editGroup",
+        "title": "Edit Group",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.deleteGroup",
+        "title": "Delete Group",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.addEnvironmentToGroup",
+        "title": "Add Environment to Group",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.removeEnvironmentFromGroup",
+        "title": "Remove from Group",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.generateMultiEnvironmentCode",
+        "title": "Generate Code for All Environments",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.showGroupDetails",
+        "title": "Show Group Details",
+        "category": "Pathfinder"
       }
     ],
     "configuration": {
@@ -141,6 +177,11 @@
           "group": "navigation"
         },
         {
+          "command": "pathfinder.addEnvironmentGroup",
+          "when": "view == pathfinderExplorer",
+          "group": "navigation"
+        },
+        {
           "command": "pathfinder.addEnvironment",
           "when": "view == pathfinderExplorer",
           "group": "navigation"
@@ -154,8 +195,28 @@
         },
         {
           "command": "pathfinder.deleteEnvironment",
-          "when": "view == pathfinderExplorer && viewItem == environment",
+          "when": "view == pathfinderExplorer && (viewItem == environment || viewItem == environment-grouped)",
           "group": "management"
+        },
+        {
+          "command": "pathfinder.removeEnvironmentFromGroup",
+          "when": "view == pathfinderExplorer && viewItem == environment-grouped",
+          "group": "management"
+        },
+        {
+          "command": "pathfinder.editGroup",
+          "when": "view == pathfinderExplorer && viewItem == environmentGroup",
+          "group": "management"
+        },
+        {
+          "command": "pathfinder.deleteGroup",
+          "when": "view == pathfinderExplorer && viewItem == environmentGroup",
+          "group": "management"
+        },
+        {
+          "command": "pathfinder.generateMultiEnvironmentCode",
+          "when": "view == pathfinderExplorer && viewItem == environmentGroup",
+          "group": "generation"
         }
       ]
     }

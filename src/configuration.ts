@@ -16,7 +16,7 @@ import { ApiEnvironment, ApiEnvironmentGroup, ExtensionSettings, LoadedSchema } 
  * Manages configuration and storage for the API Helper extension
  */
 export class ConfigurationManager {
-    private context: vscode.ExtensionContext;
+    private readonly context: vscode.ExtensionContext;
     
     /**
      * Constructor requires the extension context to access storage

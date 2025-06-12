@@ -19,15 +19,19 @@ import { ApiEnvironment, ApiEnvironmentGroup, LoadedSchema, ApiEndpoint } from '
  * Main tree data provider that implements VS Code's TreeDataProvider interface
  * This tells VS Code how to build and refresh our tree view
  */
-export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem> {
+export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscode.TreeDragAndDropController<TreeItem> {
+    
+    // Drag and drop support
+    readonly dropMimeTypes = ['application/vnd.code.tree.apitreeprovider'];
+    readonly dragMimeTypes = ['application/vnd.code.tree.apitreeprovider'];
     
     // Event emitter for when tree data changes (triggers refresh)
-    private _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
+    private readonly _onDidChangeTreeData: vscode.EventEmitter<TreeItem | undefined | null | void> = new vscode.EventEmitter<TreeItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<TreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
     
     constructor(
-        private configManager: ConfigurationManager,
-        private schemaLoader: SchemaLoader
+        private readonly configManager: ConfigurationManager,
+        private readonly schemaLoader: SchemaLoader
     ) {}
     
     /**
@@ -49,7 +53,8 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     /**
      * Get the children of a tree element
      * This is the core method that builds the tree structure
-     */    async getChildren(element?: TreeItem): Promise<TreeItem[]> {
+     */
+    async getChildren(element?: TreeItem): Promise<TreeItem[]> {
         if (!element) {
             // Root level - return groups and ungrouped environments
             return this.getEnvironments();
@@ -70,7 +75,108 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         
         return [];
     }
-      /**
+    
+    /**
+     * Handle drag operation - what can be dragged
+     */
+    async handleDrag(source: TreeItem[], treeDataTransfer: vscode.DataTransfer): Promise<void> {
+        // Only allow dragging environments
+        const draggableItems = source.filter(item => item instanceof EnvironmentTreeItem);
+        if (draggableItems.length === 0) {
+            return;
+        }        // Store the environment IDs for transfer
+        const environmentIds = draggableItems.map(item => (item as EnvironmentTreeItem).environment.id);
+        treeDataTransfer.set('application/vnd.code.tree.apitreeprovider', 
+            new vscode.DataTransferItem(JSON.stringify(environmentIds)));
+    }
+
+    /**
+     * Handle drop operation - where items can be dropped
+     */
+    async handleDrop(target: TreeItem | undefined, sources: vscode.DataTransfer): Promise<void> {
+        const transferItem = sources.get('application/vnd.code.tree.apitreeprovider');
+        if (!transferItem) {
+            return;
+        }
+
+        const environmentIds: string[] = JSON.parse(transferItem.value);
+        
+        if (target instanceof EnvironmentGroupTreeItem) {
+            // Dropping on a group - move environments to that group
+            await this.moveEnvironmentsToGroup(environmentIds, target.group.id);
+        } else if (!target || target instanceof ApiTreeProvider) {
+            // Dropping on root or empty space - move environments out of groups
+            await this.moveEnvironmentsToRoot(environmentIds);
+        }
+        
+        // Refresh the tree after the move
+        this.refresh();
+    }    /**
+     * Move environments to a specific group
+     */
+    private async moveEnvironmentsToGroup(environmentIds: string[], groupId: string): Promise<void> {
+        const group = (await this.configManager.getEnvironmentGroups()).find(g => g.id === groupId);
+        if (!group) {
+            vscode.window.showErrorMessage('Group not found');
+            return;
+        }
+
+        // Check schema compatibility if the group has a shared schema
+        if (group.sharedSchemaId) {
+            // Get loaded schemas for each environment to check compatibility
+            const allSchemas = await this.configManager.getLoadedSchemas();
+            const environmentsToMove = environmentIds;
+            
+            const incompatibleEnvs: string[] = [];
+            for (const envId of environmentsToMove) {
+                const envSchemas = allSchemas.filter(schema => schema.environmentId === envId);
+                if (envSchemas.length > 0) {
+                    // Check if any loaded schema differs from group's shared schema
+                    const hasIncompatibleSchema = envSchemas.some(schema => 
+                        schema.source !== group.sharedSchemaId
+                    );
+                    if (hasIncompatibleSchema) {
+                        incompatibleEnvs.push(envId);
+                    }
+                }
+            }
+            
+            if (incompatibleEnvs.length > 0) {
+                const proceed = await vscode.window.showWarningMessage(
+                    `${incompatibleEnvs.length} environment(s) have different schemas than the group. Continue anyway?`,
+                    'Yes', 'No'
+                );
+                if (proceed !== 'Yes') {
+                    return;
+                }
+            }
+        }
+
+        // Move each environment to the group
+        for (const environmentId of environmentIds) {
+            await this.configManager.moveEnvironmentToGroup(environmentId, groupId);
+        }
+
+        vscode.window.showInformationMessage(
+            `Moved ${environmentIds.length} environment(s) to group "${group.name}"`
+        );
+    }
+
+    /**
+     * Move environments out of groups (to root level)
+     */
+    private async moveEnvironmentsToRoot(environmentIds: string[]): Promise<void> {
+        // Move each environment out of its group
+        for (const environmentId of environmentIds) {
+            await this.configManager.moveEnvironmentToGroup(environmentId);
+        }
+
+        vscode.window.showInformationMessage(
+            `Moved ${environmentIds.length} environment(s) to root level`
+        );
+    }
+    
+    /**
      * Get the root level items: groups and ungrouped environments
      */
     private async getEnvironments(): Promise<TreeItem[]> {
@@ -106,7 +212,8 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             )];
         }
     }
-      /**
+    
+    /**
      * Get children for an environment (load schema action + existing schemas)
      */
     private async getEnvironmentChildren(envItem: EnvironmentTreeItem): Promise<TreeItem[]> {
@@ -174,7 +281,8 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             return [new MessageTreeItem('Error extracting endpoints', '', 'error')];
         }
     }
-      /**
+    
+    /**
      * Get children for a tag (the endpoints in that tag)
      */
     private getTagChildren(tagItem: TagTreeItem): TreeItem[] {

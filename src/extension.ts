@@ -40,10 +40,11 @@ export function activate(context: vscode.ExtensionContext) {
     schemaLoader = new SchemaLoader();
     treeProvider = new ApiTreeProvider(configManager, schemaLoader);
     
-    // Register the tree view
+    // Register the tree view with drag and drop support
     const treeView = vscode.window.createTreeView('pathfinderExplorer', {
         treeDataProvider: treeProvider,
-        showCollapseAll: true
+        showCollapseAll: true,
+        dragAndDropController: treeProvider
     });
     
     // Register all our commands
@@ -111,6 +112,45 @@ function registerCommands(context: vscode.ExtensionContext) {
     );
     
     // ========================
+    // Environment Group Management Commands
+    // ========================
+    
+    const addEnvironmentGroupCommand = vscode.commands.registerCommand(
+        'pathfinder.addEnvironmentGroup',
+        addEnvironmentGroupHandler
+    );
+    
+    const editGroupCommand = vscode.commands.registerCommand(
+        'pathfinder.editGroup',
+        (group: any) => editGroupHandler(group)
+    );
+    
+    const deleteGroupCommand = vscode.commands.registerCommand(
+        'pathfinder.deleteGroup',
+        (group: any) => deleteGroupHandler(group)
+    );
+    
+    const addEnvironmentToGroupCommand = vscode.commands.registerCommand(
+        'pathfinder.addEnvironmentToGroup',
+        (group: any) => addEnvironmentToGroupHandler(group)
+    );
+    
+    const removeEnvironmentFromGroupCommand = vscode.commands.registerCommand(
+        'pathfinder.removeEnvironmentFromGroup',
+        (environment: ApiEnvironment) => removeEnvironmentFromGroupHandler(environment)
+    );
+    
+    const generateMultiEnvironmentCodeCommand = vscode.commands.registerCommand(
+        'pathfinder.generateMultiEnvironmentCode',
+        (group: any) => generateMultiEnvironmentCodeHandler(group)
+    );
+    
+    const showGroupDetailsCommand = vscode.commands.registerCommand(
+        'pathfinder.showGroupDetails',
+        (group: any) => showGroupDetailsHandler(group)
+    );
+    
+    // ========================
     // Schema Loading Commands
     // ========================
     
@@ -147,6 +187,13 @@ function registerCommands(context: vscode.ExtensionContext) {
         showLoadSchemaOptionsCmd,
         editEnvironmentCmd,
         duplicateEnvironmentCmd,
+        addEnvironmentGroupCommand,
+        editGroupCommand,
+        deleteGroupCommand,
+        addEnvironmentToGroupCommand,
+        removeEnvironmentFromGroupCommand,
+        generateMultiEnvironmentCodeCommand,
+        showGroupDetailsCommand,
         loadSchemaFromUrlCommand,
         loadSchemaFromFileCommand,
         showSchemaInfoCommand,
@@ -749,6 +796,273 @@ async function showStorageStatsHandler() {
     } catch (error) {
         console.error('Failed to show storage stats:', error);
         vscode.window.showErrorMessage(`Failed to show storage stats: ${error}`);
+    }
+}
+
+// ========================
+// Environment Group Management Handlers
+// ========================
+
+/**
+ * Command to add a new environment group
+ */
+async function addEnvironmentGroupHandler() {
+    try {
+        const name = await vscode.window.showInputBox({
+            prompt: 'Enter a name for this environment group',
+            placeHolder: 'e.g., "Kibana Environments", "Production APIs"'
+        });
+        
+        if (!name) {
+            return;
+        }
+        
+        const description = await vscode.window.showInputBox({
+            prompt: 'Enter a description for this group (optional)',
+            placeHolder: 'e.g., "All Kibana test environments"'
+        });
+        
+        const colorOptions = [
+            { label: '🔵 Blue', value: 'blue' },
+            { label: '🟢 Green', value: 'green' },
+            { label: '🟠 Orange', value: 'orange' },
+            { label: '🟣 Purple', value: 'purple' },
+            { label: '🔴 Red', value: 'red' },
+            { label: '🟡 Yellow', value: 'yellow' }
+        ];
+        
+        const colorChoice = await vscode.window.showQuickPick(colorOptions, {
+            placeHolder: 'Choose a color theme for this group'
+        });
+        
+        const group = {
+            id: `group_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+            name: name.trim(),
+            description: description?.trim(),
+            color: (colorChoice?.value as 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow') ?? 'blue',
+            createdAt: new Date()
+        };
+        
+        await configManager.saveEnvironmentGroup(group);
+        treeProvider.refresh();
+        
+        vscode.window.showInformationMessage(`Environment group "${group.name}" created successfully!`);
+        
+    } catch (error) {
+        console.error('Failed to add environment group:', error);
+        vscode.window.showErrorMessage(`Failed to create group: ${error}`);
+    }
+}
+
+/**
+ * Command to edit an environment group
+ */
+async function editGroupHandler(group: any) {
+    try {
+        const name = await vscode.window.showInputBox({
+            prompt: 'Group Name',
+            value: group.name
+        });
+        
+        if (!name) {
+            return;
+        }
+        
+        const description = await vscode.window.showInputBox({
+            prompt: 'Group Description (optional)',
+            value: group.description ?? ''
+        });
+        
+        const updatedGroup = {
+            ...group,
+            name: name.trim(),
+            description: description?.trim()
+        };
+        
+        await configManager.saveEnvironmentGroup(updatedGroup);
+        treeProvider.refresh();
+        
+        vscode.window.showInformationMessage(`Group "${name}" updated successfully!`);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to update group: ${error}`);
+    }
+}
+
+/**
+ * Command to delete an environment group
+ */
+async function deleteGroupHandler(group: any) {
+    try {
+        const confirm = await vscode.window.showWarningMessage(
+            `Delete group "${group.name}"? Environments will be moved out of the group.`,
+            { modal: true },
+            'Delete Group'
+        );
+        
+        if (confirm === 'Delete Group') {
+            await configManager.deleteEnvironmentGroup(group.id);
+            treeProvider.refresh();
+            vscode.window.showInformationMessage(`Group "${group.name}" deleted.`);
+        }
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to delete group: ${error}`);
+    }
+}
+
+/**
+ * Command to add an environment to a group
+ */
+async function addEnvironmentToGroupHandler(group: any) {
+    try {
+        const ungroupedEnvironments = await configManager.getUngroupedEnvironments();
+        
+        if (ungroupedEnvironments.length === 0) {
+            vscode.window.showInformationMessage('No ungrouped environments available.');
+            return;
+        }
+        
+        const envItems = ungroupedEnvironments.map(env => ({
+            label: env.name,
+            description: env.baseUrl,
+            environment: env
+        }));
+        
+        const selectedEnv = await vscode.window.showQuickPick(envItems, {
+            placeHolder: 'Select an environment to add to this group'
+        });
+        
+        if (selectedEnv) {
+            await configManager.moveEnvironmentToGroup(selectedEnv.environment.id, group.id);
+            treeProvider.refresh();
+            vscode.window.showInformationMessage(`Environment "${selectedEnv.environment.name}" added to group "${group.name}".`);
+        }
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to add environment to group: ${error}`);
+    }
+}
+
+/**
+ * Command to remove an environment from its group
+ */
+async function removeEnvironmentFromGroupHandler(environment: any) {
+    try {
+        const confirm = await vscode.window.showWarningMessage(
+            `Remove "${environment.name}" from its group?`,
+            { modal: true },
+            'Remove from Group'
+        );
+        
+        if (confirm === 'Remove from Group') {
+            await configManager.moveEnvironmentToGroup(environment.id);
+            treeProvider.refresh();
+            vscode.window.showInformationMessage(`Environment "${environment.name}" removed from group.`);
+        }
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to remove environment from group: ${error}`);
+    }
+}
+
+/**
+ * Command to generate code for all environments in a group
+ */
+async function generateMultiEnvironmentCodeHandler(group: any) {
+    try {
+        const environments = await configManager.getEnvironmentsInGroup(group.id);
+        
+        if (environments.length === 0) {
+            vscode.window.showInformationMessage('No environments in this group.');
+            return;
+        }
+        
+        // Check if all environments have the same schema
+        const schemas = await Promise.all(
+            environments.map(env => configManager.getLoadedSchemas(env.id))
+        );
+        
+        const validSchemas = schemas.filter(schemaArray => schemaArray.length > 0);
+        
+        if (validSchemas.length === 0) {
+            vscode.window.showInformationMessage('No schemas loaded in group environments. Load schemas first.');
+            return;
+        }
+        
+        // For now, show a simple multi-environment code generation dialog
+        const formatOptions = [
+            { label: '💻 cURL Commands', value: 'curl' },
+            { label: '🔧 Ansible Tasks', value: 'ansible' },
+            { label: '⚡ PowerShell Scripts', value: 'powershell' },
+            { label: '🐍 Python Code', value: 'python' },
+            { label: '📜 JavaScript Code', value: 'javascript' }
+        ];
+        
+        const formatChoice = await vscode.window.showQuickPick(formatOptions, {
+            placeHolder: 'Choose code format to generate for all environments'
+        });
+        
+        if (formatChoice) {
+            let combinedCode = `# Multi-Environment ${formatChoice.label} for Group: ${group.name}\n`;
+            combinedCode += `# Generated on ${new Date().toLocaleString()}\n`;
+            combinedCode += `# Environments: ${environments.map(e => e.name).join(', ')}\n\n`;
+            
+            for (const env of environments) {
+                combinedCode += `## Environment: ${env.name}\n`;
+                combinedCode += `# Base URL: ${env.baseUrl}\n`;
+                combinedCode += `# Auth: ${env.auth.type}\n\n`;
+                
+                // For demonstration, generate a simple template
+                if (formatChoice.value === 'curl') {
+                    combinedCode += `curl -X GET "${env.baseUrl}/api/status" \\\n`;
+                    combinedCode += `  -H "Authorization: Bearer YOUR_TOKEN_HERE" \\\n`;
+                    combinedCode += `  -H "Content-Type: application/json"\n\n`;
+                }
+                // Add more formats as needed
+            }
+            
+            const doc = await vscode.workspace.openTextDocument({
+                content: combinedCode,
+                language: formatChoice.value === 'curl' ? 'shellscript' : formatChoice.value
+            });
+            
+            await vscode.window.showTextDocument(doc);
+        }
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to generate multi-environment code: ${error}`);
+    }
+}
+
+/**
+ * Command to show group details
+ */
+async function showGroupDetailsHandler(group: any) {
+    try {
+        const environments = await configManager.getEnvironmentsInGroup(group.id);
+        
+        const details = [
+            `# ${group.name}`,
+            '',
+            group.description ? `**Description:** ${group.description}` : '',
+            `**Color:** ${group.color ?? 'blue'}`,
+            `**Created:** ${group.createdAt.toLocaleString()}`,
+            `**Environments:** ${environments.length}`,
+            '',
+            environments.length > 0 ? '## Environments in Group:' : '',
+            ...environments.map(env => `- **${env.name}**: ${env.baseUrl}`)
+        ].filter(line => line !== '').join('\n');
+        
+        const doc = await vscode.workspace.openTextDocument({
+            content: details,
+            language: 'markdown'
+        });
+        
+        await vscode.window.showTextDocument(doc);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to show group details: ${error}`);
     }
 }
 
