@@ -15,6 +15,16 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - **Professional request formatting**: Generated requests include proper headers, authentication, and parameter placeholders
 - **Response display**: Formatted JSON responses with status codes and headers in dedicated output tabs
 
+### 🛡️ **Secure Authorization Headers**
+
+- **Password masking**: Authorization headers automatically masked with asterisks for security
+- **Eye icon toggle**: 👁️ Click to toggle visibility of sensitive tokens and API keys
+- **Smart masking**: Shows first 4 characters followed by masked content (e.g., `Bear**********************`)
+- **CodeLens integration**: "👁️ Toggle Visibility" buttons appear next to masked auth headers
+- **Global toggle**: "🔒 Hide All Auth" / "🔓 Reveal All Auth" CodeLens at document top
+- **Execution safety**: Real tokens used for requests even when masked in editor
+- **Multi-auth support**: Supports Bearer tokens, API keys, and Basic authentication masking
+
 ### 📝 **HTTP File Features**
 
 - **Language configuration**: Full language support for HTTP request files

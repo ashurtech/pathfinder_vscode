@@ -285,6 +285,11 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
         executeHttpRequestCommand
     );
     
+    const toggleAuthVisibilityCmd = vscode.commands.registerCommand(
+        'pathfinder.toggleAuthVisibility',
+        toggleAuthVisibilityCommand
+    );
+    
     // ========================
     // Tree View Refresh Commands
     // ========================
@@ -308,6 +313,7 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
         testEndpointCmd,
         runHttpRequestCmd,
         executeHttpRequestCmd,
+        toggleAuthVisibilityCmd,
         refreshTreeCmd
     );
 }
@@ -1127,7 +1133,7 @@ async function executeHttpRequestCommand(documentUri: vscode.Uri, lineNumber: nu
         const document = await vscode.workspace.openTextDocument(documentUri);
         const content = document.getText();
         
-        const request = httpRunner.parseHttpRequest(content);
+        const request = httpRunner.parseHttpRequestWithCredentials(content, documentUri.toString());
         if (!request) {
             vscode.window.showErrorMessage('Invalid HTTP request format');
             return;
@@ -1141,6 +1147,19 @@ async function executeHttpRequestCommand(documentUri: vscode.Uri, lineNumber: nu
         
     } catch (error) {
         vscode.window.showErrorMessage(`Failed to execute HTTP request: ${error}`);
+    }
+}
+
+/**
+ * Command to toggle authorization header visibility
+ */
+async function toggleAuthVisibilityCommand(documentUri: vscode.Uri) {
+    try {
+        const document = await vscode.workspace.openTextDocument(documentUri);
+        await httpRunner.toggleAuthVisibility(document);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to toggle auth visibility: ${error}`);
     }
 }
 

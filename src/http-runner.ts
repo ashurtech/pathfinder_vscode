@@ -20,9 +20,161 @@ export interface HttpResponse {
 
 export class HttpRequestRunner {
     private readonly outputChannel: vscode.OutputChannel;
+    private readonly credentialStore: Map<string, Record<string, string>> = new Map();
 
     constructor() {
         this.outputChannel = vscode.window.createOutputChannel('Pathfinder HTTP Runner');
+    }
+
+    /**
+     * Store credentials securely for a document
+     */
+    private storeCredentials(documentUri: string, credentials: Record<string, string>): void {
+        this.credentialStore.set(documentUri, credentials);
+    }
+
+    /**
+     * Retrieve stored credentials for a document
+     */
+    private getStoredCredentials(documentUri: string): Record<string, string> | undefined {
+        return this.credentialStore.get(documentUri);
+    }
+
+    /**
+     * Clear stored credentials for a document
+     */
+    private clearStoredCredentials(documentUri: string): void {
+        this.credentialStore.delete(documentUri);
+    }
+
+    /**
+     * Mask sensitive values for security display
+     */
+    private maskSensitiveValue(value: string): string {
+        if (!value || value.length <= 4) {
+            return '****';
+        }
+        
+        // Show first 4 characters, then mask the rest
+        const visible = value.substring(0, 4);
+        const masked = '*'.repeat(Math.min(value.length - 4, 20)); // Limit mask length for readability
+        return `${visible}${masked}`;
+    }
+
+    /**
+     * Extract credentials from content before masking
+     */
+    private extractCredentialsFromContent(content: string): Record<string, string> {
+        const credentials: Record<string, string> = {};
+        
+        // Extract Bearer tokens
+        const bearerMatch = /Authorization: Bearer ([a-zA-Z0-9+/=._-]+)(?! # 👁️)/g.exec(content);
+        if (bearerMatch) {
+            credentials['Authorization'] = `Bearer ${bearerMatch[1]}`;
+        }
+        
+        // Extract API keys
+        const apiKeyMatch = /X-API-Key: ([a-zA-Z0-9+/=._-]+)(?! # 👁️)/g.exec(content);
+        if (apiKeyMatch) {
+            credentials['X-API-Key'] = apiKeyMatch[1];
+        }
+        
+        // Extract Basic auth
+        const basicMatch = /Authorization: Basic ([a-zA-Z0-9+/=]+)(?! # 👁️)/g.exec(content);
+        if (basicMatch) {
+            credentials['Authorization'] = `Basic ${basicMatch[1]}`;
+        }
+        
+        return credentials;
+    }
+
+    /**
+     * Unmask authorization headers by replacing masked content with original
+     */
+    private unmaskAuthHeaders(content: string): string {
+        let result = content;
+        
+        // Replace masked Bearer tokens
+        const bearerRegex = /# PATHFINDER_HIDDEN_AUTH: (Bearer .+)/;
+        const bearerMatch = bearerRegex.exec(content);
+        if (bearerMatch) {
+            const originalAuth = bearerMatch[1];
+            result = result.replace(/Authorization: Bearer .+ # 👁️ Click to toggle visibility/, 
+                `Authorization: ${originalAuth}`);
+        }
+        
+        // Replace masked API keys
+        const apiKeyRegex = /# PATHFINDER_HIDDEN_API_KEY: (.+)/;
+        const apiKeyMatch = apiKeyRegex.exec(content);
+        if (apiKeyMatch) {
+            const originalKey = apiKeyMatch[1];
+            result = result.replace(/X-API-Key: .+ # 👁️ Click to toggle visibility/, 
+                `X-API-Key: ${originalKey}`);
+        }
+        
+        // Replace masked Basic auth
+        const basicRegex = /# PATHFINDER_HIDDEN_BASIC: (Basic .+)/;
+        const basicMatch = basicRegex.exec(content);
+        if (basicMatch) {
+            const originalBasic = basicMatch[1];
+            result = result.replace(/Authorization: Basic .+ # 👁️ Click to toggle visibility/, 
+                `Authorization: ${originalBasic}`);
+        }
+        
+        // Remove the hidden comment lines
+        result = result.replace(/# PATHFINDER_HIDDEN_[A-Z_]+: .+\n/g, '');
+        
+        return result;
+    }
+
+    /**
+     * Unmask authorization headers using securely stored credentials
+     */
+    private unmaskAuthHeadersSecure(content: string, storedCredentials: Record<string, string>): string {
+        let result = content;
+        
+        // Replace masked authorization headers with stored values
+        if (storedCredentials['Authorization']) {
+            result = result.replace(
+                /Authorization: [^#]+# 👁️ Click to toggle visibility/g,
+                storedCredentials['Authorization']
+            );
+        }
+        
+        if (storedCredentials['X-API-Key']) {
+            result = result.replace(
+                /X-API-Key: [^#]+# 👁️ Click to toggle visibility/g,
+                `X-API-Key: ${storedCredentials['X-API-Key']}`
+            );
+        }
+        
+        return result;
+    }
+
+    /**
+     * Mask authorization headers by replacing original content with masked version
+     */
+    private maskAuthHeaders(content: string): string {
+        let result = content;
+          // Mask Bearer tokens
+        result = result.replace(/Authorization: Bearer ([a-zA-Z0-9+/=._-]+)(?! # 👁️)/g, (match, token) => {
+            const masked = this.maskSensitiveValue(token);
+            return `Authorization: Bearer ${masked} # 👁️ Click to toggle visibility`;
+        });
+        
+        // Mask API keys
+        result = result.replace(/X-API-Key: ([a-zA-Z0-9+/=._-]+)(?! # 👁️)/g, (match, key) => {
+            const masked = this.maskSensitiveValue(key);
+            return `X-API-Key: ${masked} # 👁️ Click to toggle visibility`;
+        });
+        
+        // Mask Basic auth
+        result = result.replace(/Authorization: Basic ([a-zA-Z0-9+/=]+)(?! # 👁️)/g, (match, credentials) => {
+            const masked = this.maskSensitiveValue(credentials);
+            return `Authorization: Basic ${masked} # 👁️ Click to toggle visibility`;
+        });
+        
+        return result;
     }
 
     /**
@@ -42,14 +194,18 @@ export class HttpRequestRunner {
             'Content-Type: application/json',
             'Accept: application/json'
         ];
-          // Add authentication headers based on environment
+        
+        // Add authentication headers based on environment (with security masking)
         if (environment.auth.type === 'bearer' && environment.auth.bearerToken) {
-            headers.push(`Authorization: Bearer ${environment.auth.bearerToken}`);
+            const maskedToken = this.maskSensitiveValue(environment.auth.bearerToken);
+            headers.push(`Authorization: Bearer ${maskedToken} # 👁️ Click to toggle visibility`);
         } else if (environment.auth.type === 'apikey' && environment.auth.apiKey) {
-            headers.push(`X-API-Key: ${environment.auth.apiKey}`);
+            const maskedKey = this.maskSensitiveValue(environment.auth.apiKey);
+            headers.push(`X-API-Key: ${maskedKey} # 👁️ Click to toggle visibility`);
         } else if (environment.auth.type === 'basic' && environment.auth.username && environment.auth.password) {
             const credentials = Buffer.from(`${environment.auth.username}:${environment.auth.password}`).toString('base64');
-            headers.push(`Authorization: Basic ${credentials}`);
+            const maskedCredentials = this.maskSensitiveValue(credentials);
+            headers.push(`Authorization: Basic ${maskedCredentials} # 👁️ Click to toggle visibility`);
         }
 
         // Generate request body for POST/PUT/PATCH
@@ -73,7 +229,9 @@ export class HttpRequestRunner {
             if (queryParams) {
                 querySection = `?${queryParams}`;
             }
-        }        // Build the complete request
+        }
+        
+        // Build the complete request
         const requestTitle = endpoint.summary ?? `${method} ${path}`;
         const requestDescription = endpoint.description ?? 'No description available';
         
@@ -178,6 +336,37 @@ ${pathParams.map(p => `# ${p}: <value>`).join('\n') || '# No path parameters'}
             this.outputChannel.appendLine(`Error parsing HTTP request: ${error}`);
             return null;
         }
+    }
+
+    /**
+     * Parse HTTP request from editor content and restore real credentials if masked
+     */
+    parseHttpRequestWithCredentials(content: string, documentUri: string): HttpRequest | null {
+        const request = this.parseHttpRequest(content);
+        if (!request) {
+            return null;
+        }
+
+        // Check if we have stored credentials for this document
+        const storedCredentials = this.getStoredCredentials(documentUri);
+        if (storedCredentials) {
+            // Replace any masked headers with real credentials
+            for (const [headerName, realValue] of Object.entries(storedCredentials)) {
+                if (headerName === 'Authorization' && request.headers['Authorization']) {
+                    // Check if the current header is masked
+                    if (request.headers['Authorization'].includes('****')) {
+                        request.headers['Authorization'] = realValue;
+                    }
+                } else if (headerName === 'X-API-Key' && request.headers['X-API-Key']) {
+                    // Check if the current header is masked
+                    if (request.headers['X-API-Key'].includes('****')) {
+                        request.headers['X-API-Key'] = realValue;
+                    }
+                }
+            }
+        }
+
+        return request;
     }
 
     /**
@@ -299,6 +488,21 @@ ${formattedBody}
                 language: 'http'
             });
 
+            // Store credentials securely for this document
+            const credentials: Record<string, string> = {};
+            if (environment.auth.type === 'bearer' && environment.auth.bearerToken) {
+                credentials['Authorization'] = `Bearer ${environment.auth.bearerToken}`;
+            } else if (environment.auth.type === 'apikey' && environment.auth.apiKey) {
+                credentials['X-API-Key'] = environment.auth.apiKey;
+            } else if (environment.auth.type === 'basic' && environment.auth.username && environment.auth.password) {
+                const basicCredentials = Buffer.from(`${environment.auth.username}:${environment.auth.password}`).toString('base64');
+                credentials['Authorization'] = `Basic ${basicCredentials}`;
+            }
+            
+            if (Object.keys(credentials).length > 0) {
+                this.storeCredentials(document.uri.toString(), credentials);
+            }
+
             // Show in editor
             await vscode.window.showTextDocument(document, {
                 preview: false,
@@ -345,7 +549,9 @@ ${formattedBody}
     private extractPathParameters(path: string): string[] {
         const matches = path.match(/\{([^}]+)\}/g);
         return matches ? matches.map(match => match.slice(1, -1)) : [];
-    }    private formatBytes(bytes: number): string {
+    }
+
+    private formatBytes(bytes: number): string {
         if (bytes === 0) {
             return '0 B';
         }
@@ -353,6 +559,69 @@ ${formattedBody}
         const sizes = ['B', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    /**
+     * Toggle visibility of authorization headers in HTTP file
+     */
+    async toggleAuthVisibility(document: vscode.TextDocument): Promise<void> {
+        try {
+            const content = document.getText();
+            const isCurrentlyMasked = content.includes('👁️ Click to toggle visibility');
+            const storedCredentials = this.getStoredCredentials(document.uri.toString());
+            
+            let newContent: string;
+            if (isCurrentlyMasked && storedCredentials) {
+                // Unmask using stored credentials
+                newContent = this.unmaskAuthHeadersSecure(content, storedCredentials);
+                vscode.window.showInformationMessage('🔓 Authorization headers revealed');
+            } else {
+                // Mask the auth headers (also store credentials if not already stored)
+                if (!storedCredentials) {
+                    const extractedCredentials = this.extractCredentialsFromContent(content);
+                    if (Object.keys(extractedCredentials).length > 0) {
+                        this.storeCredentials(document.uri.toString(), extractedCredentials);
+                    }
+                }
+                newContent = this.maskAuthHeaders(content);
+                vscode.window.showInformationMessage('🔒 Authorization headers masked for security');
+            }
+            
+            // Apply the changes to the document
+            const edit = new vscode.WorkspaceEdit();
+            const fullRange = new vscode.Range(
+                document.positionAt(0),
+                document.positionAt(content.length)
+            );
+            edit.replace(document.uri, fullRange, newContent);
+            
+            await vscode.workspace.applyEdit(edit);
+            
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Failed to toggle auth visibility: ${errorMessage}`);
+            this.outputChannel.appendLine(`Error toggling auth visibility: ${errorMessage}`);
+        }
+    }
+
+    /**
+     * Check if document contains masked authorization headers
+     */
+    hasMaskedAuth(content: string): boolean {
+        return content.includes('👁️ Click to toggle visibility');
+    }
+
+    /**
+     * Check if document contains unmasked authorization headers
+     */
+    hasUnmaskedAuth(content: string): boolean {
+        const authPatterns = [
+            /Authorization: Bearer [a-zA-Z0-9+/=]{20,}(?! # 👁️)/,
+            /Authorization: Basic [a-zA-Z0-9+/=]{20,}(?! # 👁️)/,
+            /X-API-Key: [a-zA-Z0-9+/=_-]{20,}(?! # 👁️)/
+        ];
+        
+        return authPatterns.some(pattern => pattern.test(content));
     }
 
     dispose(): void {
