@@ -116,12 +116,12 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     const loadSchemaFromUrlCommand = vscode.commands.registerCommand(
         'pathfinder.loadSchemaFromUrl', 
-        loadSchemaFromUrlHandler
+        (environment?: ApiEnvironment) => loadSchemaFromUrlHandler(environment)
     );
     
     const loadSchemaFromFileCommand = vscode.commands.registerCommand(
         'pathfinder.loadSchemaFromFile', 
-        loadSchemaFromFileHandler
+        (environment?: ApiEnvironment) => loadSchemaFromFileHandler(environment)
     );
     
     const showSchemaInfoCommand = vscode.commands.registerCommand(
@@ -480,28 +480,37 @@ async function deleteApiEnvironmentHandler() {
 /**
  * Command to load a schema from a URL
  */
-async function loadSchemaFromUrlHandler() {
+async function loadSchemaFromUrlHandler(environment?: ApiEnvironment) {
     try {
-        // First, user selects an environment
-        const environments = await configManager.getApiEnvironments();
+        let selectedEnv: ApiEnvironment;
         
-        if (environments.length === 0) {
-            vscode.window.showWarningMessage('No API environments configured. Please add an environment first.');
-            return;
-        }
-        
-        const envItems = environments.map(env => ({
-            label: env.name,
-            description: env.baseUrl,
-            environment: env
-        }));
-        
-        const selectedEnv = await vscode.window.showQuickPick(envItems, {
-            placeHolder: 'Select the environment for this schema'
-        });
-        
-        if (!selectedEnv) {
-            return;
+        if (environment) {
+            // Environment already provided (from tree view)
+            selectedEnv = environment;
+        } else {
+            // Need to select environment (from command palette)
+            const environments = await configManager.getApiEnvironments();
+            
+            if (environments.length === 0) {
+                vscode.window.showWarningMessage('No API environments configured. Please add an environment first.');
+                return;
+            }
+            
+            const envItems = environments.map(env => ({
+                label: env.name,
+                description: env.baseUrl,
+                environment: env
+            }));
+            
+            const selectedEnvItem = await vscode.window.showQuickPick(envItems, {
+                placeHolder: 'Select the environment for this schema'
+            });
+            
+            if (!selectedEnvItem) {
+                return;
+            }
+            
+            selectedEnv = selectedEnvItem.environment;
         }
         
         // Ask for the schema URL
@@ -530,7 +539,7 @@ async function loadSchemaFromUrlHandler() {
         }, async (progress) => {
             progress.report({ message: 'Downloading schema...' });
             
-            const loadedSchema = await schemaLoader.loadFromUrl(schemaUrl, selectedEnv.environment);
+            const loadedSchema = await schemaLoader.loadFromUrl(schemaUrl, selectedEnv);
             
             progress.report({ message: 'Saving schema...' });
             await configManager.saveLoadedSchema(loadedSchema);
@@ -541,13 +550,13 @@ async function loadSchemaFromUrlHandler() {
             if (loadedSchema.isValid) {
                 const info = schemaLoader.getSchemaInfo(loadedSchema.schema);
                 vscode.window.showInformationMessage(
-                    `✅ Schema loaded successfully!\\n` +
-                    `API: ${info.title} v${info.version}\\n` +
+                    `✅ Schema loaded successfully!\n` +
+                    `API: ${info.title} v${info.version}\n` +
                     `Endpoints: ${info.endpointCount}`
                 );
             } else {
                 vscode.window.showErrorMessage(
-                    `❌ Schema failed to load:\\n${loadedSchema.validationErrors?.join('\\n')}`
+                    `❌ Schema failed to load:\n${loadedSchema.validationErrors?.join('\n')}`
                 );
             }
         });
@@ -561,28 +570,37 @@ async function loadSchemaFromUrlHandler() {
 /**
  * Command to load a schema from a file
  */
-async function loadSchemaFromFileHandler() {
+async function loadSchemaFromFileHandler(environment?: ApiEnvironment) {
     try {
-        // First, user selects an environment
-        const environments = await configManager.getApiEnvironments();
+        let selectedEnv: ApiEnvironment;
         
-        if (environments.length === 0) {
-            vscode.window.showWarningMessage('No API environments configured. Please add an environment first.');
-            return;
-        }
-        
-        const envItems = environments.map(env => ({
-            label: env.name,
-            description: env.baseUrl,
-            environment: env
-        }));
-        
-        const selectedEnv = await vscode.window.showQuickPick(envItems, {
-            placeHolder: 'Select the environment for this schema'
-        });
-        
-        if (!selectedEnv) {
-            return;
+        if (environment) {
+            // Environment already provided (from tree view)
+            selectedEnv = environment;
+        } else {
+            // Need to select environment (from command palette)
+            const environments = await configManager.getApiEnvironments();
+            
+            if (environments.length === 0) {
+                vscode.window.showWarningMessage('No API environments configured. Please add an environment first.');
+                return;
+            }
+            
+            const envItems = environments.map(env => ({
+                label: env.name,
+                description: env.baseUrl,
+                environment: env
+            }));
+            
+            const selectedEnvItem = await vscode.window.showQuickPick(envItems, {
+                placeHolder: 'Select the environment for this schema'
+            });
+            
+            if (!selectedEnvItem) {
+                return;
+            }
+            
+            selectedEnv = selectedEnvItem.environment;
         }
         
         // Ask user to select a file
@@ -611,7 +629,7 @@ async function loadSchemaFromFileHandler() {
         }, async (progress) => {
             progress.report({ message: 'Parsing schema file...' });
             
-            const loadedSchema = await schemaLoader.loadFromFile(filePath, selectedEnv.environment);
+            const loadedSchema = await schemaLoader.loadFromFile(filePath, selectedEnv);
             
             progress.report({ message: 'Saving schema...' });
             await configManager.saveLoadedSchema(loadedSchema);
@@ -622,13 +640,13 @@ async function loadSchemaFromFileHandler() {
             if (loadedSchema.isValid) {
                 const info = schemaLoader.getSchemaInfo(loadedSchema.schema);
                 vscode.window.showInformationMessage(
-                    `✅ Schema loaded successfully!\\n` +
-                    `API: ${info.title} v${info.version}\\n` +
+                    `✅ Schema loaded successfully!\n` +
+                    `API: ${info.title} v${info.version}\n` +
                     `Endpoints: ${info.endpointCount}`
                 );
             } else {
                 vscode.window.showErrorMessage(
-                    `❌ Schema failed to load:\\n${loadedSchema.validationErrors?.join('\\n')}`
+                    `❌ Schema failed to load:\n${loadedSchema.validationErrors?.join('\n')}`
                 );
             }
         });
