@@ -2,7 +2,7 @@
   "name": "pathfinder-openapi-explorer",
   "displayName": "Pathfinder - OpenAPI Explorer",
   "description": "Explore, test, and generate code for OpenAPI/REST APIs with intelligent platform detection",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "pathfinder",
   "repository": {
     "type": "git",
@@ -132,6 +132,17 @@
         "command": "pathfinder.showGroupDetails",
         "title": "Show Group Details",
         "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.runHttpRequest",
+        "title": "Run HTTP Request",
+        "icon": "$(play)",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.executeHttpRequest",
+        "title": "Execute HTTP Request",
+        "category": "Pathfinder"
       }
     ],
     "configuration": {
@@ -160,6 +171,14 @@
         }
       }
     },
+    "languages": [
+      {
+        "id": "http",
+        "aliases": ["HTTP", "http"],
+        "extensions": [".http", ".rest"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
     "views": {
       "explorer": [
         {

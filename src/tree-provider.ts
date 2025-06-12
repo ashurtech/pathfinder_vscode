@@ -340,12 +340,18 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 'pathfinder.generateJavaScript',
                 'symbol-function',
                 [endpoint, schemaItem]
-            ),
-            new EndpointActionTreeItem(
+            ),            new EndpointActionTreeItem(
                 '🧪 Test Endpoint',
                 'Execute a test request to this endpoint',
                 'pathfinder.testEndpoint',
                 'beaker',
+                [endpoint, schemaItem]
+            ),
+            new EndpointActionTreeItem(
+                '🚀 Run HTTP Request',
+                'Open HTTP request editor for this endpoint',
+                'pathfinder.runHttpRequest',
+                'play',
                 [endpoint, schemaItem]
             )
         ];

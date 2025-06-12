@@ -11,6 +11,8 @@ import * as vscode from 'vscode';
 import { ConfigurationManager } from './configuration';
 import { SchemaLoader } from './schema-loader';
 import { ApiTreeProvider } from './tree-provider';
+import { HttpRequestRunner } from './http-runner';
+import { HttpCodeLensProvider } from './http-codelens';
 import { 
     showEnvironmentDetailsCommand, 
     showSchemaDetailsCommand, 
@@ -21,12 +23,13 @@ import {
     editEnvironmentCommand,
     duplicateEnvironmentCommand
 } from './tree-commands';
-import { ApiEnvironment } from './types';
+import { ApiEnvironment, EndpointInfo } from './types';
 
 // Global instances that will be used throughout the extension
 let configManager: ConfigurationManager;
 let schemaLoader: SchemaLoader;
 let treeProvider: ApiTreeProvider;
+let httpRunner: HttpRequestRunner;
 
 /**
  * This method is called when your extension is activated
@@ -38,6 +41,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Initialize our core services
     configManager = new ConfigurationManager(context);
     schemaLoader = new SchemaLoader();
+    httpRunner = new HttpRequestRunner();
     treeProvider = new ApiTreeProvider(configManager, schemaLoader);
     
     // Register the tree view with drag and drop support
@@ -47,14 +51,21 @@ export function activate(context: vscode.ExtensionContext) {
         dragAndDropController: treeProvider
     });
     
+    // Register CodeLens provider for HTTP files
+    const httpCodeLensProvider = new HttpCodeLensProvider(httpRunner);
+    const codeLensProviderDisposable = vscode.languages.registerCodeLensProvider(
+        { language: 'http' },
+        httpCodeLensProvider
+    );
+    
     // Register all our commands
     registerCommands(context);
     
     // Register tree view commands
     registerTreeCommands(context);
     
-    // Add tree view to subscriptions
-    context.subscriptions.push(treeView);
+    // Add disposables to subscriptions
+    context.subscriptions.push(treeView, codeLensProviderDisposable);
     
     console.log('✅ Pathfinder - OpenAPI Explorer is now active!');
 }
@@ -264,6 +275,16 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
         testEndpointCommand
     );
     
+    const runHttpRequestCmd = vscode.commands.registerCommand(
+        'pathfinder.runHttpRequest',
+        runHttpRequestCommand
+    );
+    
+    const executeHttpRequestCmd = vscode.commands.registerCommand(
+        'pathfinder.executeHttpRequest',
+        executeHttpRequestCommand
+    );
+    
     // ========================
     // Tree View Refresh Commands
     // ========================
@@ -285,6 +306,8 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
         generatePythonCmd,
         generateJavaScriptCmd,
         testEndpointCmd,
+        runHttpRequestCmd,
+        executeHttpRequestCmd,
         refreshTreeCmd
     );
 }
@@ -1063,6 +1086,61 @@ async function showGroupDetailsHandler(group: any) {
         
     } catch (error) {
         vscode.window.showErrorMessage(`Failed to show group details: ${error}`);
+    }
+}
+
+/**
+ * Command to run HTTP request from endpoint
+ */
+async function runHttpRequestCommand(endpoint: any, schemaItem: any) {
+    try {
+        // Get the environment from the schema
+        const environment = await configManager.getApiEnvironment(schemaItem.environment.id);
+        if (!environment) {
+            vscode.window.showErrorMessage('Environment not found');
+            return;
+        }
+
+        // Create EndpointInfo from the endpoint data
+        const endpointInfo: EndpointInfo = {
+            path: endpoint.path,
+            method: endpoint.method,
+            summary: endpoint.summary,
+            description: endpoint.description,
+            parameters: endpoint.parameters ?? [],
+            tags: endpoint.tags ?? []
+        };
+
+        // Open HTTP request editor
+        await httpRunner.openRequestEditor(endpointInfo, environment);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to open HTTP request: ${error}`);
+    }
+}
+
+/**
+ * Command to execute HTTP request from CodeLens
+ */
+async function executeHttpRequestCommand(documentUri: vscode.Uri, lineNumber: number) {
+    try {
+        const document = await vscode.workspace.openTextDocument(documentUri);
+        const content = document.getText();
+        
+        const request = httpRunner.parseHttpRequest(content);
+        if (!request) {
+            vscode.window.showErrorMessage('Invalid HTTP request format');
+            return;
+        }
+
+        // Execute the request
+        const response = await httpRunner.executeRequest(request);
+        
+        // Display the response
+        await httpRunner.displayResponse(response, request);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to execute HTTP request: ${error}`);
     }
 }
 

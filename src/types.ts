@@ -145,9 +145,31 @@ export interface ApiEndpoint {
     
     /** Request body schema (for POST/PUT requests) */
     requestBody?: any;
-    
-    /** Possible response schemas */
+      /** Possible response schemas */
     responses?: { [statusCode: string]: any };
+}
+
+/**
+ * Simplified endpoint information for HTTP requests
+ */
+export interface EndpointInfo {
+    /** The HTTP path (e.g., "/api/users/{id}") */
+    path: string;
+    
+    /** The HTTP method (GET, POST, PUT, DELETE, etc.) */
+    method: string;
+    
+    /** Brief description of what this endpoint does */
+    summary?: string;
+    
+    /** Detailed description */
+    description?: string;
+    
+    /** Parameters this endpoint accepts */
+    parameters?: ApiParameter[];
+    
+    /** Tags for grouping endpoints */
+    tags?: string[];
 }
 
 /**

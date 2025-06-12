@@ -4,6 +4,44 @@ All notable changes to the "Pathfinder - OpenAPI Explorer" extension will be doc
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.1.2] - 2025-06-13 - HTTP Request Runner Feature
+
+### 🚀 **HTTP Request Runner**
+
+- **Generate HTTP requests from endpoints**: Click "🚀 Run HTTP Request" on any endpoint to create executable HTTP files
+- **CodeLens integration**: "▶ Run Request" buttons appear in HTTP files for one-click execution
+- **Direct request execution**: Execute HTTP requests within VS Code and view responses in new tabs
+- **HTTP file language support**: Syntax highlighting, folding, and auto-completion for .http and .rest files
+- **Professional request formatting**: Generated requests include proper headers, authentication, and parameter placeholders
+- **Response display**: Formatted JSON responses with status codes and headers in dedicated output tabs
+
+### 📝 **HTTP File Features**
+
+- **Language configuration**: Full language support for HTTP request files
+- **Syntax highlighting**: Comments, HTTP methods, URLs, headers, and JSON bodies
+- **Code folding**: Organize multiple requests with ### separators
+- **Auto-completion**: Smart suggestions for HTTP methods and common headers
+
+### 🎯 **Enhanced Tree View Integration**
+
+- **New endpoint action**: "🚀 Run HTTP Request" action added to all endpoint children in tree view
+- **Seamless workflow**: From OpenAPI exploration to live testing in one click
+- **Environment integration**: Generated requests automatically include environment URLs and authentication
+
+### 🔧 **Technical Implementation**
+
+- **HttpRequestRunner class**: Core engine for request parsing, execution, and response handling
+- **HttpCodeLensProvider**: CodeLens provider for "▶ Run Request" buttons in HTTP editors
+- **Command registration**: `pathfinder.runHttpRequest` and `pathfinder.executeHttpRequest` commands
+- **Type-safe implementation**: Full TypeScript support with proper interfaces and error handling
+- **Axios integration**: Robust HTTP client with timeout and error handling
+
+### ✅ **HTTP Runner Quality Assurance**
+
+- **Zero compilation errors**: Extension builds cleanly with new HTTP Runner features
+- **Comprehensive testing**: Complete test suite for HTTP Runner workflow
+- **Memory efficient**: Proper disposal of CodeLens providers and event handlers
+
 ## [0.1.1] - 2025-06-13 - User Experience Improvements
 
 ### 🎯 **Improved Schema Loading Experience**
