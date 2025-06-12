@@ -95,23 +95,34 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             )];
         }
     }
-    
-    /**
-     * Get children for an environment (schemas)
+      /**
+     * Get children for an environment (load schema action + existing schemas)
      */
     private async getEnvironmentChildren(envItem: EnvironmentTreeItem): Promise<TreeItem[]> {
         try {
+            const children: TreeItem[] = [];
+            
+            // Add "Load Schema" action item as first child
+            children.push(new LoadSchemaActionTreeItem(envItem.environment));
+            
+            // Add environment management actions
+            children.push(new EditEnvironmentActionTreeItem(envItem.environment));
+            children.push(new DuplicateEnvironmentActionTreeItem(envItem.environment));
+            
+            // Then add all existing schemas
             const schemas = await this.configManager.getLoadedSchemas(envItem.environment.id);
             
             if (schemas.length === 0) {
-                return [new MessageTreeItem(
+                children.push(new MessageTreeItem(
                     'No schemas loaded',
-                    'Use "Load Schema" commands to add schemas',
+                    'Use "Load Schema" action above to add schemas',
                     'file'
-                )];
+                ));
+            } else {
+                children.push(...schemas.map(schema => new SchemaTreeItem(schema, envItem.environment)));
             }
             
-            return schemas.map(schema => new SchemaTreeItem(schema, envItem.environment));
+            return children;
         } catch (error) {
             console.error('Failed to load schemas for environment:', error);
             return [new MessageTreeItem('Error loading schemas', '', 'error')];
@@ -405,5 +416,63 @@ class MessageTreeItem extends TreeItem {
         
         // Gray out message items
         this.resourceUri = vscode.Uri.parse('untitled:message');
+    }
+}
+
+/**
+ * Tree item for "Load Schema" action under environments
+ */
+class LoadSchemaActionTreeItem extends TreeItem {
+    constructor(public readonly environment: ApiEnvironment) {
+        super('📂 Load Schema...', vscode.TreeItemCollapsibleState.None);
+        
+        this.iconPath = new vscode.ThemeIcon('add');
+        this.tooltip = 'Load a new OpenAPI schema into this environment';
+        this.contextValue = 'loadSchemaAction';
+        
+        // Show submenu when clicked
+        this.command = {
+            command: 'api-helper-extension.showLoadSchemaOptions',
+            title: 'Load Schema Options',
+            arguments: [environment]
+        };
+    }
+}
+
+/**
+ * Tree item for "Edit Environment" action
+ */
+class EditEnvironmentActionTreeItem extends TreeItem {
+    constructor(public readonly environment: ApiEnvironment) {
+        super('✏️ Edit Environment', vscode.TreeItemCollapsibleState.None);
+        
+        this.iconPath = new vscode.ThemeIcon('edit');
+        this.tooltip = 'Edit this environment\'s settings';
+        this.contextValue = 'editEnvironmentAction';
+        
+        this.command = {
+            command: 'api-helper-extension.editEnvironment',
+            title: 'Edit Environment',
+            arguments: [environment]
+        };
+    }
+}
+
+/**
+ * Tree item for "Duplicate Environment" action
+ */
+class DuplicateEnvironmentActionTreeItem extends TreeItem {
+    constructor(public readonly environment: ApiEnvironment) {
+        super('📋 Duplicate Environment', vscode.TreeItemCollapsibleState.None);
+        
+        this.iconPath = new vscode.ThemeIcon('copy');
+        this.tooltip = 'Create a copy of this environment';
+        this.contextValue = 'duplicateEnvironmentAction';
+        
+        this.command = {
+            command: 'api-helper-extension.duplicateEnvironment',
+            title: 'Duplicate Environment',
+            arguments: [environment]
+        };
     }
 }

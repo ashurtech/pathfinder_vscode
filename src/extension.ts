@@ -11,7 +11,16 @@ import * as vscode from 'vscode';
 import { ConfigurationManager } from './configuration';
 import { SchemaLoader } from './schema-loader';
 import { ApiTreeProvider } from './tree-provider';
-import { showEnvironmentDetailsCommand, showSchemaDetailsCommand, showEndpointDetailsCommand, generateCodeForEndpointCommand, testEndpointCommand } from './tree-commands';
+import { 
+    showEnvironmentDetailsCommand, 
+    showSchemaDetailsCommand, 
+    showEndpointDetailsCommand, 
+    generateCodeForEndpointCommand, 
+    testEndpointCommand,
+    showLoadSchemaOptionsCommand,
+    editEnvironmentCommand,
+    duplicateEnvironmentCommand
+} from './tree-commands';
 import { ApiEnvironment } from './types';
 
 // Global instances that will be used throughout the extension
@@ -81,6 +90,25 @@ function registerCommands(context: vscode.ExtensionContext) {
         'api-helper-extension.deleteEnvironment', 
         deleteApiEnvironmentHandler
     );
+
+    // ========================
+    // New Environment Management Commands
+    // ========================
+    
+    const showLoadSchemaOptionsCmd = vscode.commands.registerCommand(
+        'api-helper-extension.showLoadSchemaOptions',
+        (environment: ApiEnvironment) => showLoadSchemaOptionsCommand(environment)
+    );
+    
+    const editEnvironmentCmd = vscode.commands.registerCommand(
+        'api-helper-extension.editEnvironment',
+        (environment: ApiEnvironment) => editEnvironmentCommand(environment, configManager)
+    );
+    
+    const duplicateEnvironmentCmd = vscode.commands.registerCommand(
+        'api-helper-extension.duplicateEnvironment', 
+        (environment: ApiEnvironment) => duplicateEnvironmentCommand(environment, configManager)
+    );
     
     // ========================
     // Schema Loading Commands
@@ -116,6 +144,9 @@ function registerCommands(context: vscode.ExtensionContext) {
         addEnvironmentCommand,
         listEnvironmentsCommand,
         deleteEnvironmentCommand,
+        showLoadSchemaOptionsCmd,
+        editEnvironmentCmd,
+        duplicateEnvironmentCmd,
         loadSchemaFromUrlCommand,
         loadSchemaFromFileCommand,
         showSchemaInfoCommand,

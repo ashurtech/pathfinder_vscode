@@ -6,8 +6,74 @@
  */
 
 import * as vscode from 'vscode';
-import { ApiEnvironment, LoadedSchema, ApiEndpoint } from './types';
+import { ApiEnvironment, LoadedSchema, ApiEndpoint, RequestGeneratorConfig, PLATFORM_CONFIGS } from './types';
 import { SchemaLoader } from './schema-loader';
+import { ConfigurationManager } from './configuration';
+
+/**
+ * Determine platform configuration for a schema/environment
+ */
+function getPlatformConfig(schema?: LoadedSchema, environment?: ApiEnvironment): RequestGeneratorConfig {
+    // First priority: explicit platform config from schema
+    if (schema?.platformConfig) {
+        return schema.platformConfig;
+    }
+    
+    // Second priority: auto-detect from environment name/URL
+    if (environment) {
+        const envName = environment.name.toLowerCase();
+        const envUrl = environment.baseUrl.toLowerCase();
+        
+        if (envName.includes('kibana') || envUrl.includes('kibana')) {
+            return PLATFORM_CONFIGS.kibana;
+        }
+        
+        if (envName.includes('elasticsearch') || envUrl.includes('elasticsearch')) {
+            return PLATFORM_CONFIGS.elasticsearch;
+        }
+    }
+    
+    // Default: generic configuration
+    return PLATFORM_CONFIGS.generic;
+}
+
+/**
+ * Apply platform-specific headers to a headers object
+ */
+function applyPlatformHeaders(headers: Record<string, string>, platformConfig: RequestGeneratorConfig): Record<string, string> {
+    const result = { ...headers };
+    
+    // Add required headers from platform config
+    if (platformConfig.requiredHeaders) {
+        Object.assign(result, platformConfig.requiredHeaders);
+    }
+    
+    return result;
+}
+
+/**
+ * Get platform-specific authentication header format
+ */
+function getPlatformAuthHeader(auth: any, platformConfig: RequestGeneratorConfig): string | null {
+    if (auth.type === 'bearer' && auth.bearerToken) {
+        return `Bearer ${auth.bearerToken}`;
+    }
+    
+    if (auth.type === 'apikey' && auth.apiKey && auth.apiKeyLocation === 'header') {
+        const headerFormat = platformConfig.authConfig?.headerFormat;
+        if (headerFormat === 'ApiKey') {
+            return `ApiKey ${auth.apiKey}`;
+        }
+        return auth.apiKey;
+    }
+    
+    if (auth.type === 'basic' && auth.username && auth.password) {
+        const credentials = Buffer.from(`${auth.username}:${auth.password}`).toString('base64');
+        return `Basic ${credentials}`;
+    }
+    
+    return null;
+}
 
 /**
  * Show detailed information about an environment when clicked in tree
@@ -108,8 +174,9 @@ export async function showEndpointDetailsCommand(endpoint: ApiEndpoint, schemaIt
  * Generate code for an endpoint with support for different formats
  */
 export async function generateCodeForEndpointCommand(endpoint: ApiEndpoint, schemaItem: any, format: string = 'curl') {
-    // Extract environment from schemaItem
     const environment = schemaItem.environment;
+    const schema = schemaItem.schema;
+    const platformConfig = getPlatformConfig(schema, environment);
     
     let generatedCode: string;
     let language: string;
@@ -117,34 +184,35 @@ export async function generateCodeForEndpointCommand(endpoint: ApiEndpoint, sche
     
     switch (format.toLowerCase()) {
         case 'curl':
-            generatedCode = generateCurlCommand(endpoint, environment);
+            generatedCode = generateCurlCommand(endpoint, environment, platformConfig);
             language = 'shellscript';
             title = 'cURL Command';
             break;
         case 'ansible':
-            generatedCode = generateAnsibleTask(endpoint, environment);
+            generatedCode = generateAnsibleTask(endpoint, environment, platformConfig);
             language = 'yaml';
             title = 'Ansible Task';
             break;
         case 'powershell':
-            generatedCode = generatePowerShellScript(endpoint, environment);
+            generatedCode = generatePowerShellScript(endpoint, environment, platformConfig);
             language = 'powershell';
             title = 'PowerShell Script';
             break;
         case 'python':
-            generatedCode = generatePythonCode(endpoint, environment);
+            generatedCode = generatePythonCode(endpoint, environment, platformConfig);
             language = 'python';
             title = 'Python Code';
             break;
         case 'javascript':
-            generatedCode = generateJavaScriptCode(endpoint, environment);
+            generatedCode = generateJavaScriptCode(endpoint, environment, platformConfig);
             language = 'javascript';
             title = 'JavaScript Code';
             break;
         default:
-            generatedCode = generateCurlCommand(endpoint, environment);
+            generatedCode = generateCurlCommand(endpoint, environment, platformConfig);
             language = 'shellscript';
             title = 'cURL Command';
+            break;
     }
     
     const doc = await vscode.workspace.openTextDocument({
@@ -177,30 +245,26 @@ export async function testEndpointCommand(endpoint: ApiEndpoint, schemaItem: any
 /**
  * Generate cURL command for an endpoint
  */
-function generateCurlCommand(endpoint: ApiEndpoint, environment: ApiEnvironment): string {
+function generateCurlCommand(endpoint: ApiEndpoint, environment: ApiEnvironment, platformConfig?: RequestGeneratorConfig): string {
     const url = `${environment.baseUrl}${endpoint.path}`;
     let command = `curl -X ${endpoint.method} "${url}"`;
     
-    // Check if this looks like a Kibana environment
-    const isKibana = environment.baseUrl.toLowerCase().includes('kibana') || 
-                     environment.name.toLowerCase().includes('kibana');
+    const config = platformConfig ?? getPlatformConfig(undefined, environment);
     
     // Add authentication headers
-    if (environment.auth.type === 'bearer' && environment.auth.bearerToken) {
-        command += ` \\\n  -H "Authorization: Bearer ${environment.auth.bearerToken}"`;
-    } else if (environment.auth.type === 'apikey' && environment.auth.apiKey && environment.auth.apiKeyLocation === 'header') {
-        if (isKibana) {
-            command += ` \\\n  -H "Authorization: ApiKey ${environment.auth.apiKey}"`;
+    const authHeader = getPlatformAuthHeader(environment.auth, config);
+    if (authHeader) {
+        if (environment.auth.type === 'basic') {
+            command += ` \\\n  -u "${environment.auth.username}:${environment.auth.password}"`;
         } else {
-            command += ` \\\n  -H "${environment.auth.apiKeyName ?? 'X-API-Key'}: ${environment.auth.apiKey}"`;
+            command += ` \\\n  -H "Authorization: ${authHeader}"`;
         }
-    } else if (environment.auth.type === 'basic' && environment.auth.username && environment.auth.password) {
-        command += ` \\\n  -u "${environment.auth.username}:${environment.auth.password}"`;
     }
     
-    // Add Kibana CSRF protection header if needed
-    if (isKibana) {
-        command += ` \\\n  -H "kbn-xsrf: true"`;
+    // Apply platform-specific headers
+    const headers = applyPlatformHeaders({}, config);
+    for (const [key, value] of Object.entries(headers)) {
+        command += ` \\\n  -H "${key}: ${value}"`;
     }
     
     // Add content type for methods that typically have body
@@ -217,13 +281,11 @@ function generateCurlCommand(endpoint: ApiEndpoint, environment: ApiEnvironment)
 /**
  * Generate Ansible task for an endpoint
  */
-function generateAnsibleTask(endpoint: ApiEndpoint, environment: ApiEnvironment): string {
+function generateAnsibleTask(endpoint: ApiEndpoint, environment: ApiEnvironment, platformConfig?: RequestGeneratorConfig): string {
     const taskName = `${endpoint.method} ${endpoint.path}`;
     const url = `${environment.baseUrl}${endpoint.path}`;
     
-    // Check if this looks like a Kibana environment
-    const isKibana = environment.baseUrl.toLowerCase().includes('kibana') || 
-                     environment.name.toLowerCase().includes('kibana');
+    const config = platformConfig ?? getPlatformConfig(undefined, environment);
     
     let task = `---
 - name: "${taskName}"
@@ -234,22 +296,20 @@ function generateAnsibleTask(endpoint: ApiEndpoint, environment: ApiEnvironment)
     // Prepare headers
     const headers: string[] = [];
     
-    // Add Kibana CSRF protection header if needed
-    if (isKibana) {
-        headers.push('      kbn-xsrf: "true"');
+    // Apply platform-specific headers
+    const platformHeaders = applyPlatformHeaders({}, config);
+    for (const [key, value] of Object.entries(platformHeaders)) {
+        headers.push(`      ${key}: "${value}"`);
     }
     
     // Add authentication
-    if (environment.auth.type === 'bearer' && environment.auth.bearerToken) {
-        headers.push(`      Authorization: "Bearer ${environment.auth.bearerToken}"`);
-    } else if (environment.auth.type === 'apikey' && environment.auth.apiKey && environment.auth.apiKeyLocation === 'header') {
-        if (isKibana) {
-            headers.push(`      Authorization: "ApiKey ${environment.auth.apiKey}"`);
+    const authHeader = getPlatformAuthHeader(environment.auth, config);
+    if (authHeader) {
+        if (environment.auth.type === 'basic') {
+            task += `\n    user: "${environment.auth.username}"\n    password: "${environment.auth.password}"`;
         } else {
-            headers.push(`      ${environment.auth.apiKeyName ?? 'X-API-Key'}: "${environment.auth.apiKey}"`);
+            headers.push(`      Authorization: "${authHeader}"`);
         }
-    } else if (environment.auth.type === 'basic' && environment.auth.username && environment.auth.password) {
-        task += `\n    user: "${environment.auth.username}"\n    password: "${environment.auth.password}"`;
     }
     
     // Add headers if any
@@ -268,18 +328,26 @@ function generateAnsibleTask(endpoint: ApiEndpoint, environment: ApiEnvironment)
 }
 
 /**
- * Generate PowerShell script for an endpoint (Kibana-optimized)
+ * Generate PowerShell script for an endpoint (Platform-optimized)
  */
-function generatePowerShellScript(endpoint: ApiEndpoint, environment: ApiEnvironment): string {
+function generatePowerShellScript(endpoint: ApiEndpoint, environment: ApiEnvironment, platformConfig?: RequestGeneratorConfig): string {
     const url = `${environment.baseUrl}${endpoint.path}`;
-    const isKibana = isKibanaEnvironment(environment);
+    const config = platformConfig ?? getPlatformConfig(undefined, environment);
     
     let script = `# PowerShell script for ${endpoint.method} ${endpoint.path}\n`;
-    script += `# Generated by API Helper Extension\n\n`;
+    script += `# Generated by API Helper Extension\n`;
+    
+    // Add platform-specific comments
+    if (config.codeGenHints?.comments) {
+        config.codeGenHints.comments.forEach(comment => {
+            script += `# ${comment}\n`;
+        });
+    }
+    script += `\n`;
     
     script += `$uri = "${url}"\n$method = "${endpoint.method}"\n\n`;
-    script += generatePowerShellHeaders(environment, isKibana);
-    script += generatePowerShellSSLSection(isKibana);
+    script += generatePowerShellHeaders(environment, config);
+    script += generatePowerShellSSLSection(config);
     script += generatePowerShellRequestSection(endpoint);
     script += generatePowerShellErrorSection();
     
@@ -287,62 +355,37 @@ function generatePowerShellScript(endpoint: ApiEndpoint, environment: ApiEnviron
 }
 
 /**
- * Check if environment is Kibana-related
- */
-function isKibanaEnvironment(environment: ApiEnvironment): boolean {
-    return environment.baseUrl.toLowerCase().includes('kibana') || 
-           environment.name.toLowerCase().includes('kibana');
-}
-
-/**
  * Generate PowerShell headers section
  */
-function generatePowerShellHeaders(environment: ApiEnvironment, isKibana: boolean): string {
+function generatePowerShellHeaders(environment: ApiEnvironment, platformConfig: RequestGeneratorConfig): string {
     let script = `# Configure headers\n$headers = @{\n    "Content-Type" = "application/json"\n`;
     
-    if (isKibana) {
-        script += `    "kbn-xsrf" = "true"  # Required by Kibana for CSRF protection\n`;
+    // Apply platform-specific headers
+    const headers = applyPlatformHeaders({}, platformConfig);
+    for (const [key, value] of Object.entries(headers)) {
+        script += `    "${key}" = "${value}"\n`;
     }
     
-    script += generateAuthHeaders(environment, isKibana);
+    // Add authentication headers
+    const authHeader = getPlatformAuthHeader(environment.auth, platformConfig);
+    if (authHeader) {
+        script += `    "Authorization" = "${authHeader}"\n`;
+    }
+    
     script += `}\n\n`;
     return script;
 }
 
 /**
- * Generate authentication headers for PowerShell
- */
-function generateAuthHeaders(environment: ApiEnvironment, isKibana: boolean): string {
-    const { auth } = environment;
-    
-    if (auth.type === 'bearer' && auth.bearerToken) {
-        return `    "Authorization" = "Bearer ${auth.bearerToken}"\n`;
-    }
-    
-    if (auth.type === 'apikey' && auth.apiKey && auth.apiKeyLocation === 'header') {
-        if (isKibana) {
-            return `    "Authorization" = "ApiKey ${auth.apiKey}"  # Kibana API key format\n`;
-        }
-        return `    "${auth.apiKeyName ?? 'X-API-Key'}" = "${auth.apiKey}"\n`;
-    }
-    
-    if (auth.type === 'basic' && auth.username && auth.password) {
-        const credentials = Buffer.from(`${auth.username}:${auth.password}`).toString('base64');
-        return `    "Authorization" = "Basic ${credentials}"\n`;
-    }
-    
-    return '';
-}
-
-/**
  * Generate PowerShell SSL section
  */
-function generatePowerShellSSLSection(isKibana: boolean): string {
-    if (!isKibana) {
+function generatePowerShellSSLSection(platformConfig: RequestGeneratorConfig): string {
+    if (!platformConfig.sslConfig?.allowSelfSigned) {
         return '';
     }
     
-    return `# Handle SSL certificates (common with Kibana)\n# Uncomment the next line if using self-signed certificates\n# [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}\n\n`;
+    const notes = platformConfig.sslConfig.notes ? ` (${platformConfig.sslConfig.notes})` : '';
+    return `# Handle SSL certificates${notes}\n# Uncomment the next line if using self-signed certificates\n# [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {$true}\n\n`;
 }
 
 /**
@@ -414,12 +457,9 @@ function generatePowerShellErrorSection(): string {
 /**
  * Generate Python code for an endpoint
  */
-function generatePythonCode(endpoint: ApiEndpoint, environment: ApiEnvironment): string {
+function generatePythonCode(endpoint: ApiEndpoint, environment: ApiEnvironment, platformConfig?: RequestGeneratorConfig): string {
     const url = `${environment.baseUrl}${endpoint.path}`;
-    
-    // Check if this looks like a Kibana environment
-    const isKibana = environment.baseUrl.toLowerCase().includes('kibana') || 
-                     environment.name.toLowerCase().includes('kibana');
+    const config = platformConfig ?? getPlatformConfig(undefined, environment);
     
     let code = `# Python code for ${endpoint.method} ${endpoint.path}\n\n`;
     code += `import requests\nimport json\n\n`;
@@ -428,19 +468,16 @@ function generatePythonCode(endpoint: ApiEndpoint, environment: ApiEnvironment):
     // Prepare headers
     code += `headers = {\n    "Content-Type": "application/json"`;
     
-    // Add Kibana CSRF protection header if needed
-    if (isKibana) {
-        code += `,\n    "kbn-xsrf": "true"  # Required by Kibana for CSRF protection`;
+    // Apply platform-specific headers
+    const headers = applyPlatformHeaders({}, config);
+    for (const [key, value] of Object.entries(headers)) {
+        code += `,\n    "${key}": "${value}"`;
     }
     
-    if (environment.auth.type === 'bearer' && environment.auth.bearerToken) {
-        code += `,\n    "Authorization": "Bearer ${environment.auth.bearerToken}"`;
-    } else if (environment.auth.type === 'apikey' && environment.auth.apiKey && environment.auth.apiKeyLocation === 'header') {
-        if (isKibana) {
-            code += `,\n    "Authorization": "ApiKey ${environment.auth.apiKey}"  # Kibana API key format`;
-        } else {
-            code += `,\n    "${environment.auth.apiKeyName ?? 'X-API-Key'}": "${environment.auth.apiKey}"`;
-        }
+    // Add authentication
+    const authHeader = getPlatformAuthHeader(environment.auth, config);
+    if (authHeader) {
+        code += `,\n    "Authorization": "${authHeader}"`;
     }
     
     code += `\n}\n\n`;
@@ -461,31 +498,25 @@ function generatePythonCode(endpoint: ApiEndpoint, environment: ApiEnvironment):
 /**
  * Generate JavaScript code for an endpoint
  */
-function generateJavaScriptCode(endpoint: ApiEndpoint, environment: ApiEnvironment): string {
+function generateJavaScriptCode(endpoint: ApiEndpoint, environment: ApiEnvironment, platformConfig?: RequestGeneratorConfig): string {
     const url = `${environment.baseUrl}${endpoint.path}`;
-    
-    // Check if this looks like a Kibana environment
-    const isKibana = environment.baseUrl.toLowerCase().includes('kibana') || 
-                     environment.name.toLowerCase().includes('kibana');
+    const config = platformConfig ?? getPlatformConfig(undefined, environment);
     
     let code = `// JavaScript code for ${endpoint.method} ${endpoint.path}\n\n`;
     
     // Prepare headers
     code += `const headers = {\n    "Content-Type": "application/json"`;
     
-    // Add Kibana CSRF protection header if needed
-    if (isKibana) {
-        code += `,\n    "kbn-xsrf": "true"  // Required by Kibana for CSRF protection`;
+    // Apply platform-specific headers
+    const headers = applyPlatformHeaders({}, config);
+    for (const [key, value] of Object.entries(headers)) {
+        code += `,\n    "${key}": "${value}"`;
     }
     
-    if (environment.auth.type === 'bearer' && environment.auth.bearerToken) {
-        code += `,\n    "Authorization": "Bearer ${environment.auth.bearerToken}"`;
-    } else if (environment.auth.type === 'apikey' && environment.auth.apiKey && environment.auth.apiKeyLocation === 'header') {
-        if (isKibana) {
-            code += `,\n    "Authorization": "ApiKey ${environment.auth.apiKey}"  // Kibana API key format`;
-        } else {
-            code += `,\n    "${environment.auth.apiKeyName ?? 'X-API-Key'}": "${environment.auth.apiKey}"`;
-        }
+    // Add authentication
+    const authHeader = getPlatformAuthHeader(environment.auth, config);
+    if (authHeader) {
+        code += `,\n    "Authorization": "${authHeader}"`;
     }
     
     code += `\n};\n\n`;
@@ -503,4 +534,140 @@ function generateJavaScriptCode(endpoint: ApiEndpoint, environment: ApiEnvironme
     code += `\n.then(response => {\n    if (!response.ok) {\n        throw new Error(\`HTTP error! status: \${response.status}\`);\n    }\n    return response.json();\n})\n.then(data => console.log(data))\n.catch(error => console.error('Error:', error));`;
     
     return code;
+}
+
+/**
+ * Show load schema options (from file or URL)
+ */
+export async function showLoadSchemaOptionsCommand(environment: ApiEnvironment) {
+    const choice = await vscode.window.showQuickPick([
+        {
+            label: '📁 Load from File',
+            description: 'Browse for an OpenAPI schema file on your computer',
+            action: 'file'
+        },
+        {
+            label: '🌐 Load from URL',
+            description: 'Enter a URL to download the schema',
+            action: 'url'
+        }
+    ], {
+        placeHolder: 'How would you like to load the schema?'
+    });
+
+    if (choice) {
+        if (choice.action === 'file') {
+            await vscode.commands.executeCommand('api-helper-extension.loadSchemaFromFile', environment);
+        } else {
+            await vscode.commands.executeCommand('api-helper-extension.loadSchemaFromUrl', environment);
+        }
+    }
+}
+
+/**
+ * Edit an existing environment
+ */
+export async function editEnvironmentCommand(environment: ApiEnvironment, configManager: ConfigurationManager) {
+    // Show input for name
+    const name = await vscode.window.showInputBox({
+        prompt: 'Environment Name',
+        value: environment.name,
+        validateInput: (value) => {
+            if (!value.trim()) {
+                return 'Environment name cannot be empty';
+            }
+            return null;
+        }
+    });
+    
+    if (!name) {
+        return; // User cancelled
+    }
+    
+    // Show input for base URL
+    const baseUrl = await vscode.window.showInputBox({
+        prompt: 'Base URL',
+        value: environment.baseUrl,
+        validateInput: (value) => {
+            if (!value.trim()) {
+                return 'Base URL cannot be empty';
+            }
+            try {
+                new URL(value);
+                return null;
+            } catch {
+                return 'Please enter a valid URL';
+            }
+        }
+    });
+    
+    if (!baseUrl) {
+        return; // User cancelled
+    }
+    
+    // Show description input
+    const description = await vscode.window.showInputBox({
+        prompt: 'Description (optional)',
+        value: environment.description ?? ''
+    });
+    
+    // Create updated environment
+    const updatedEnvironment: ApiEnvironment = {
+        ...environment,
+        name: name.trim(),
+        baseUrl: baseUrl.trim(),
+        description: description?.trim() ?? undefined
+    };
+    
+    try {
+        await configManager.saveApiEnvironment(updatedEnvironment);
+        vscode.window.showInformationMessage(`Environment "${name}" updated successfully!`);
+        
+        // Refresh tree view
+        vscode.commands.executeCommand('api-helper-extension.refresh');
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to update environment: ${error}`);
+    }
+}
+
+/**
+ * Duplicate an existing environment
+ */
+export async function duplicateEnvironmentCommand(environment: ApiEnvironment, configManager: ConfigurationManager) {
+    // Generate a default name for the duplicate
+    const defaultName = `${environment.name} (Copy)`;
+    
+    const name = await vscode.window.showInputBox({
+        prompt: 'Name for duplicated environment',
+        value: defaultName,
+        validateInput: (value) => {
+            if (!value.trim()) {
+                return 'Environment name cannot be empty';
+            }
+            return null;
+        }
+    });
+    
+    if (!name) {
+        return; // User cancelled
+    }
+    
+    // Create new environment with same settings but new ID and name
+    const newEnvironment: ApiEnvironment = {
+        ...environment,
+        id: `env_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        name: name.trim(),
+        createdAt: new Date(),
+        lastUsed: undefined
+    };
+    
+    try {
+        await configManager.saveApiEnvironment(newEnvironment);
+        vscode.window.showInformationMessage(`Environment "${name}" created successfully!`);
+        
+        // Refresh tree view
+        vscode.commands.executeCommand('api-helper-extension.refresh');
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to duplicate environment: ${error}`);
+    }
 }

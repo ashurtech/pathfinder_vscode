@@ -85,6 +85,9 @@ export interface LoadedSchema {
     
     /** Any validation errors we found */
     validationErrors?: string[];
+    
+    /** Platform-specific configurations */
+    platformConfig?: RequestGeneratorConfig;
 }
 
 /**
@@ -211,3 +214,78 @@ export interface ExtensionSettings {
     /** Maximum number of recent requests to keep in history */
     maxHistoryItems: number;
 }
+
+/**
+ * Configuration for request generators - platform-specific settings
+ */
+export interface RequestGeneratorConfig {
+    /** Platform identifier (e.g., 'kibana', 'elasticsearch', 'generic') */
+    platform: string;
+    
+    /** Additional headers required by this platform */
+    requiredHeaders?: Record<string, string>;
+    
+    /** Authentication format overrides */
+    authConfig?: {
+        /** Use specific auth header format (e.g., 'ApiKey' instead of 'Bearer') */
+        headerFormat?: string;
+        /** Additional auth parameters */
+        additionalParams?: Record<string, string>;
+    };
+    
+    /** SSL/TLS specific configurations */
+    sslConfig?: {
+        /** Whether this platform commonly uses self-signed certificates */
+        allowSelfSigned?: boolean;
+        /** Additional SSL handling notes */
+        notes?: string;
+    };
+    
+    /** Platform-specific code generation hints */
+    codeGenHints?: {
+        /** Additional imports needed for this platform */
+        imports?: string[];
+        /** Platform-specific comments */
+        comments?: string[];
+        /** Special error handling */
+        errorHandling?: string;
+    };
+}
+
+/**
+ * Predefined platform configurations
+ */
+export const PLATFORM_CONFIGS: Record<string, RequestGeneratorConfig> = {
+    kibana: {
+        platform: 'kibana',
+        requiredHeaders: {
+            'kbn-xsrf': 'true'
+        },
+        authConfig: {
+            headerFormat: 'ApiKey'
+        },
+        sslConfig: {
+            allowSelfSigned: true,
+            notes: 'Kibana often uses self-signed certificates in development'
+        },
+        codeGenHints: {
+            comments: [
+                'Kibana requires kbn-xsrf header for CSRF protection',
+                'API keys use "Authorization: ApiKey <key>" format'
+            ]
+        }
+    },
+    elasticsearch: {
+        platform: 'elasticsearch',
+        authConfig: {
+            headerFormat: 'ApiKey'
+        },
+        sslConfig: {
+            allowSelfSigned: true,
+            notes: 'Elasticsearch often uses self-signed certificates'
+        }
+    },
+    generic: {
+        platform: 'generic'
+    }
+};
