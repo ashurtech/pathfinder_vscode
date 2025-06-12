@@ -80,20 +80,21 @@ function getPlatformAuthHeader(auth: any, platformConfig: RequestGeneratorConfig
  */
 export async function showEnvironmentDetailsCommand(environment: ApiEnvironment) {
     const details = [
-        `# ${environment.name}`,
+        `${environment.name}`,
+        `${'='.repeat(environment.name.length)}`,
         '',
-        `**Base URL:** ${environment.baseUrl}`,
-        `**Authentication:** ${environment.auth.type}`,
-        `**Created:** ${environment.createdAt.toLocaleString()}`,
-        environment.lastUsed ? `**Last Used:** ${environment.lastUsed.toLocaleString()}` : '**Never used**',
+        `Base URL: ${environment.baseUrl}`,
+        `Authentication: ${environment.auth.type}`,
+        `Created: ${environment.createdAt.toLocaleString()}`,
+        environment.lastUsed ? `Last Used: ${environment.lastUsed.toLocaleString()}` : 'Never used',
         '',
-        environment.description ? `**Description:** ${environment.description}` : ''
+        environment.description ? `Description: ${environment.description}` : ''
     ].filter(line => line !== '').join('\n');
     
-    // Show in a new untitled document with markdown highlighting
+    // Show in a new untitled document with plain text (no annoying markdown linting)
     const doc = await vscode.workspace.openTextDocument({
         content: details,
-        language: 'markdown'
+        language: 'plaintext'
     });
     
     await vscode.window.showTextDocument(doc);
@@ -107,24 +108,25 @@ export async function showSchemaDetailsCommand(schema: LoadedSchema) {
     const info = schemaLoader.getSchemaInfo(schema.schema);
     
     const details = [
-        `# ${info.title} v${info.version}`,
+        `${info.title} v${info.version}`,
+        `${'='.repeat(`${info.title} v${info.version}`.length)}`,
         '',
-        info.description ? `**Description:** ${info.description}` : '',
-        `**Servers:** ${info.serverCount}`,
-        `**Paths:** ${info.pathCount}`,
-        `**Endpoints:** ${info.endpointCount}`,
+        info.description ? `Description: ${info.description}` : '',
+        `Servers: ${info.serverCount}`,
+        `Paths: ${info.pathCount}`,
+        `Endpoints: ${info.endpointCount}`,
         '',
-        `**Source:** ${schema.source}`,
-        `**Loaded:** ${schema.loadedAt.toLocaleString()}`,
-        `**Valid:** ${schema.isValid ? '✅ Yes' : '❌ No'}`,
+        `Source: ${schema.source}`,
+        `Loaded: ${schema.loadedAt.toLocaleString()}`,
+        `Valid: ${schema.isValid ? '✅ Yes' : '❌ No'}`,
         '',
         schema.validationErrors && schema.validationErrors.length > 0 ? 
-            `**Validation Errors:**\n${schema.validationErrors.map(err => `- ${err}`).join('\n')}` : ''
+            `Validation Errors:\n${schema.validationErrors.map(err => `• ${err}`).join('\n')}` : ''
     ].filter(line => line !== '').join('\n');
     
     const doc = await vscode.workspace.openTextDocument({
         content: details,
-        language: 'markdown'
+        language: 'plaintext'
     });
     
     await vscode.window.showTextDocument(doc);
@@ -134,39 +136,93 @@ export async function showSchemaDetailsCommand(schema: LoadedSchema) {
  * Show detailed information about an API endpoint when clicked in tree
  */
 export async function showEndpointDetailsCommand(endpoint: ApiEndpoint, schemaItem: any) {
-    const details = [
-        `# ${endpoint.method} ${endpoint.path}`,
-        '',
-        endpoint.summary ? `**Summary:** ${endpoint.summary}` : '',
-        endpoint.description ? `**Description:** ${endpoint.description}` : '',
-        endpoint.operationId ? `**Operation ID:** ${endpoint.operationId}` : '',
-        endpoint.tags && endpoint.tags.length > 0 ? `**Tags:** ${endpoint.tags.join(', ')}` : '',
-        '',
-        '## Parameters',
-        endpoint.parameters && endpoint.parameters.length > 0 ? 
-            endpoint.parameters.map(param => 
-                `- **${param.name}** (${param.in}) ${param.required ? '*required*' : '*optional*'}: ${param.description || 'No description'}`
-            ).join('\n') : 
-            'No parameters',
-        '',
-        '## Request Body',
-        endpoint.requestBody ? 
-            '```json\n' + JSON.stringify(endpoint.requestBody, null, 2) + '\n```' : 
-            'No request body',
-        '',
-        '## Responses',
-        endpoint.responses ? 
-            Object.entries(endpoint.responses).map(([code, response]) => 
-                `- **${code}**: ${typeof response === 'object' ? JSON.stringify(response, null, 2) : response}`
-            ).join('\n') : 
-            'No response definitions'
-    ].filter(line => line !== '').join('\n');
-    
+    // Compose the HTTP request line
+    const requestLine = `${endpoint.method} ${endpoint.path}`;
+    const baseUrl = schemaItem?.environment?.baseUrl || '';
+    const fullUrl = baseUrl ? `${baseUrl}${endpoint.path}` : endpoint.path;
+
+    // Compose headers for http syntax highlighting
+    let headers: string[] = [];
+    if (endpoint.parameters && endpoint.parameters.length > 0) {
+        const headerParams = endpoint.parameters.filter(p => p.in === 'header');
+        headers = headerParams.map(param => `${param.name}: <${param.name}>`);
+    }
+
+    // Compose body (if any)
+    let body = '';
+    if (endpoint.requestBody) {
+        try {
+            body = JSON.stringify(endpoint.requestBody, null, 2);
+        } catch {
+            body = String(endpoint.requestBody);
+        }
+    }
+
+    // Build the http-formatted request preview with enhanced formatting
+    let httpPreview = '';
+    httpPreview += `# ╔════════════════════════════════════════════════════════════╗\n`;
+    httpPreview += `# 🚩 API REQUEST PREVIEW\n`;
+    httpPreview += `# ╚════════════════════════════════════════════════════════════╝\n`;
+    httpPreview += `\n`;
+    if (endpoint.summary) {
+        httpPreview += `# 📄 ${endpoint.summary.toUpperCase()}\n`;
+    }
+    httpPreview += `# ----------------------------------------------------------\n`;
+    httpPreview += `# REQUEST LINE\n`;
+    httpPreview += `${endpoint.method} ${fullUrl}\n`;
+    if (headers.length) {
+        httpPreview += `\n# HEADERS\n`;
+        httpPreview += headers.map(h => h).join('\n') + '\n';
+    }
+    if (body) {
+        httpPreview += `\n# BODY\n`;
+        httpPreview += body + '\n';
+    }
+    httpPreview += `\n# ==========================================================\n`;
+
+    // Add details section with clear, visually distinct headings
+    let details = '';
+    details += `\n# ╔════════════════════════════════════════════════════════════╗\n`;
+    details += `# 📦 ENDPOINT DETAILS\n`;
+    details += `# ╚════════════════════════════════════════════════════════════╝\n`;
+    details += `\n# 📝 DESCRIPTION\n`;
+    details += `#   ${endpoint.description || 'No description'}\n`;
+    if (endpoint.operationId) {
+        details += `#\n# 🆔 OPERATION ID\n`;
+        details += `#   ${endpoint.operationId}\n`;
+    }
+    if (endpoint.tags && endpoint.tags.length > 0) {
+        details += `#\n# 🏷️ TAGS\n`;
+        details += `#   ${endpoint.tags.join(', ')}\n`;
+    }
+    details += `#\n# 🔑 PARAMETERS`;
+    if (endpoint.parameters && endpoint.parameters.length > 0) {
+        details += '\n';
+        details += endpoint.parameters.map(param =>
+            `#   - ${param.name} (${param.in}) ${param.required ? '[REQUIRED]' : '[OPTIONAL]'}: ${param.description || 'No description'}`
+        ).join('\n');
+    } else {
+        details += '  None';
+    }
+    details += '\n#\n# 📬 RESPONSES:';
+    if (endpoint.responses) {
+        details += '\n';
+        details += Object.entries(endpoint.responses).map(([code, response]) =>
+            `#   - ${code}: ${typeof response === 'object' ? JSON.stringify(response, null, 2) : response}`
+        ).join('\n');
+    } else {
+        details += '  None';
+    }
+    details += '\n# ==========================================================\n';
+
+    // Combine for display
+    const content = `${httpPreview}\n${details}`;
+
+    // Show in a new untitled document with http highlighting
     const doc = await vscode.workspace.openTextDocument({
-        content: details,
-        language: 'markdown'
+        content,
+        language: 'http'
     });
-    
     await vscode.window.showTextDocument(doc);
 }
 

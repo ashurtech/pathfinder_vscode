@@ -541,9 +541,7 @@ ${formattedBody}
             vscode.window.showErrorMessage(`Failed to open request editor: ${errorMessage}`);
             this.outputChannel.appendLine(`Error opening request editor: ${errorMessage}`);
         }
-    }
-
-    /**
+    }    /**
      * Display response in new tab
      */
     async displayResponse(response: HttpResponse, originalRequest: HttpRequest): Promise<void> {
@@ -553,7 +551,7 @@ ${formattedBody}
             // Create new untitled document for response
             const document = await vscode.workspace.openTextDocument({
                 content: formattedResponse,
-                language: 'markdown'
+                language: 'plaintext'
             });
 
             // Show in new column

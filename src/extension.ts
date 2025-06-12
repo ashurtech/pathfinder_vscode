@@ -1072,20 +1072,21 @@ async function showGroupDetailsHandler(group: any) {
         const environments = await configManager.getEnvironmentsInGroup(group.id);
         
         const details = [
-            `# ${group.name}`,
+            `${group.name}`,
+            `${'='.repeat(group.name.length)}`,
             '',
-            group.description ? `**Description:** ${group.description}` : '',
-            `**Color:** ${group.color ?? 'blue'}`,
-            `**Created:** ${group.createdAt.toLocaleString()}`,
-            `**Environments:** ${environments.length}`,
+            group.description ? `Description: ${group.description}` : '',
+            `Color: ${group.color ?? 'blue'}`,
+            `Created: ${group.createdAt.toLocaleString()}`,
+            `Environments: ${environments.length}`,
             '',
-            environments.length > 0 ? '## Environments in Group:' : '',
-            ...environments.map(env => `- **${env.name}**: ${env.baseUrl}`)
+            environments.length > 0 ? 'Environments in Group:' : '',
+            ...environments.map(env => `• ${env.name}: ${env.baseUrl}`)
         ].filter(line => line !== '').join('\n');
         
         const doc = await vscode.workspace.openTextDocument({
             content: details,
-            language: 'markdown'
+            language: 'plaintext'
         });
         
         await vscode.window.showTextDocument(doc);
