@@ -4,6 +4,26 @@ All notable changes to the "Pathfinder - OpenAPI Explorer" extension will be doc
 
 Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
 
+## [0.1.1] - 2025-06-13 - User Experience Improvements
+
+### 🎯 **Improved Schema Loading Experience**
+- **Enhanced schema loading workflow**: Click "Load Schema" under environment now skips environment selection dialog
+- **Direct environment targeting**: Schema loads directly into parent environment from tree view
+- **Preserved command palette functionality**: Environment selection still available when using commands from palette
+- **Backward compatibility maintained**: All existing functionality continues to work
+
+### ⚠️ **Friendlier Validation Messages**
+- **Changed error to warning**: Schema validation issues now show as warnings instead of aggressive error messages
+- **Enhanced message content**: Include schema information (title, version, endpoint count) in validation messages
+- **User-friendly language**: Changed from "Schema failed to load" to "Schema loaded with validation warnings"
+- **Contextual information**: Users now understand the schema loaded successfully despite validation issues
+- **Maintained functionality**: All extension features remain available even with validation warnings
+
+### 🔧 **Technical Improvements**
+- **Updated command handlers**: Added optional environment parameters to schema loading commands
+- **Improved message formatting**: Better error summary with concise display for multiple validation issues
+- **Code quality**: Used nullish coalescing operator (`??`) instead of logical OR (`||`) for better type safety
+
 ## [0.1.0] - 2024-12-20 - Major Rebrand: Pathfinder - OpenAPI Explorer
 
 ### 🚀 **Complete Rebranding**

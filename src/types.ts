@@ -10,6 +10,30 @@
 import { OpenAPIV3 } from 'openapi-types';
 
 /**
+ * Represents a group of API environments that share the same schema
+ * This allows organizing environments and performing batch operations
+ */
+export interface ApiEnvironmentGroup {
+    /** Unique identifier for this group */
+    id: string;
+    
+    /** Human-readable name for the group */
+    name: string;
+    
+    /** Optional description of this group */
+    description?: string;
+    
+    /** The shared schema ID that all environments in this group must use */
+    sharedSchemaId?: string;
+    
+    /** When this group was created */
+    createdAt: Date;
+    
+    /** Color/icon theme for visual distinction */
+    color?: 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow';
+}
+
+/**
  * Represents a single API environment (like your different Kibana instances)
  * This is where we store the base URL and authentication details for each environment
  */
@@ -28,6 +52,9 @@ export interface ApiEnvironment {
     
     /** Optional description of this environment */
     description?: string;
+    
+    /** Optional group membership - if set, this environment belongs to a group */
+    groupId?: string;
     
     /** When this environment was created */
     createdAt: Date;

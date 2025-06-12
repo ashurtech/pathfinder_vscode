@@ -10,7 +10,7 @@
  */
 
 import * as vscode from 'vscode';
-import { ApiEnvironment, ExtensionSettings, LoadedSchema } from './types';
+import { ApiEnvironment, ApiEnvironmentGroup, ExtensionSettings, LoadedSchema } from './types';
 
 /**
  * Manages configuration and storage for the API Helper extension
@@ -111,6 +111,111 @@ export class ConfigurationManager {
             environment.lastUsed = new Date();
             await this.saveApiEnvironment(environment);
         }
+    }
+    
+    // ========================
+    // Environment Group Management
+    // ========================
+    
+    /**
+     * Get all configured environment groups
+     */
+    async getEnvironmentGroups(): Promise<ApiEnvironmentGroup[]> {
+        const groups = this.context.globalState.get<ApiEnvironmentGroup[]>('environmentGroups', []);
+        
+        // Convert stored date strings back to Date objects
+        return groups.map(group => ({
+            ...group,
+            createdAt: new Date(group.createdAt)
+        }));
+    }
+    
+    /**
+     * Save or update an environment group
+     * @param group The group to save
+     */
+    async saveEnvironmentGroup(group: ApiEnvironmentGroup): Promise<void> {
+        const groups = await this.getEnvironmentGroups();
+        
+        // Check if this is an update (group with same ID exists)
+        const existingIndex = groups.findIndex(g => g.id === group.id);
+        
+        if (existingIndex >= 0) {
+            // Update existing group
+            groups[existingIndex] = group;
+        } else {
+            // Add new group
+            groups.push(group);
+        }
+        
+        await this.context.globalState.update('environmentGroups', groups);
+        console.log(`Saved environment group: ${group.name}`);
+    }
+    
+    /**
+     * Delete an environment group
+     * @param groupId The ID of the group to delete
+     */
+    async deleteEnvironmentGroup(groupId: string): Promise<boolean> {
+        const groups = await this.getEnvironmentGroups();
+        const filteredGroups = groups.filter(group => group.id !== groupId);
+        
+        if (filteredGroups.length === groups.length) {
+            return false; // Nothing was deleted
+        }
+        
+        // Also remove group membership from all environments
+        const environments = await this.getApiEnvironments();
+        const updatedEnvironments = environments.map(env => 
+            env.groupId === groupId ? { ...env, groupId: undefined } : env
+        );
+        await this.context.globalState.update('apiEnvironments', updatedEnvironments);
+        
+        await this.context.globalState.update('environmentGroups', filteredGroups);
+        console.log(`Deleted environment group: ${groupId}`);
+        return true;
+    }
+    
+    /**
+     * Get a specific environment group by ID
+     * @param groupId The ID to look for
+     */
+    async getEnvironmentGroup(groupId: string): Promise<ApiEnvironmentGroup | undefined> {
+        const groups = await this.getEnvironmentGroups();
+        return groups.find(group => group.id === groupId);
+    }
+    
+    /**
+     * Get environments that belong to a specific group
+     * @param groupId The group ID
+     */
+    async getEnvironmentsInGroup(groupId: string): Promise<ApiEnvironment[]> {
+        const environments = await this.getApiEnvironments();
+        return environments.filter(env => env.groupId === groupId);
+    }
+    
+    /**
+     * Get environments that don't belong to any group
+     */
+    async getUngroupedEnvironments(): Promise<ApiEnvironment[]> {
+        const environments = await this.getApiEnvironments();
+        return environments.filter(env => !env.groupId);
+    }
+    
+    /**
+     * Move an environment to a group (or remove from group if groupId is undefined)
+     * @param environmentId The environment to move
+     * @param groupId The target group ID (or undefined to remove from group)
+     */
+    async moveEnvironmentToGroup(environmentId: string, groupId?: string): Promise<boolean> {
+        const environment = await this.getApiEnvironment(environmentId);
+        if (!environment) {
+            return false;
+        }
+        
+        environment.groupId = groupId;
+        await this.saveApiEnvironment(environment);
+        return true;
     }
     
     // ========================

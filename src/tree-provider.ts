@@ -13,7 +13,7 @@
 import * as vscode from 'vscode';
 import { ConfigurationManager } from './configuration';
 import { SchemaLoader } from './schema-loader';
-import { ApiEnvironment, LoadedSchema, ApiEndpoint } from './types';
+import { ApiEnvironment, ApiEnvironmentGroup, LoadedSchema, ApiEndpoint } from './types';
 
 /**
  * Main tree data provider that implements VS Code's TreeDataProvider interface
@@ -49,14 +49,16 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem> {
     /**
      * Get the children of a tree element
      * This is the core method that builds the tree structure
-     */
-    async getChildren(element?: TreeItem): Promise<TreeItem[]> {
+     */    async getChildren(element?: TreeItem): Promise<TreeItem[]> {
         if (!element) {
-            // Root level - return all environments
+            // Root level - return groups and ungrouped environments
             return this.getEnvironments();
         }
-          // Handle different types of tree items
-        if (element instanceof EnvironmentTreeItem) {
+        
+        // Handle different types of tree items
+        if (element instanceof EnvironmentGroupTreeItem) {
+            return this.getGroupChildren(element);
+        } else if (element instanceof EnvironmentTreeItem) {
             return this.getEnvironmentChildren(element);
         } else if (element instanceof SchemaTreeItem) {
             return this.getSchemaChildren(element);
@@ -68,26 +70,35 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         
         return [];
     }
-    
-    /**
-     * Get all API environments as tree items
+      /**
+     * Get the root level items: groups and ungrouped environments
      */
     private async getEnvironments(): Promise<TreeItem[]> {
         try {
-            const environments = await this.configManager.getApiEnvironments();
+            const items: TreeItem[] = [];
             
-            if (environments.length === 0) {
-                // Show a helpful message when no environments exist
-                return [new MessageTreeItem(
-                    'No API environments configured',
-                    'Click "Add API Environment" to get started',
-                    'add'
-                )];
+            // Add all environment groups
+            const groups = await this.configManager.getEnvironmentGroups();
+            items.push(...groups.map(group => new EnvironmentGroupTreeItem(group)));
+            
+            // Add ungrouped environments
+            const ungroupedEnvironments = await this.configManager.getUngroupedEnvironments();
+            items.push(...ungroupedEnvironments.map(env => new EnvironmentTreeItem(env)));
+            
+            if (items.length === 0) {
+                // Show helpful messages when nothing exists
+                return [
+                    new MessageTreeItem(
+                        'No environments or groups configured',
+                        'Click "Add Environment Group" or "Add API Environment" to get started',
+                        'add'
+                    )
+                ];
             }
             
-            return environments.map(env => new EnvironmentTreeItem(env));
+            return items;
         } catch (error) {
-            console.error('Failed to load environments for tree view:', error);
+            console.error('Failed to load environments and groups for tree view:', error);
             return [new MessageTreeItem(
                 'Error loading environments',
                 'Check the console for details',
@@ -251,6 +262,38 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem> {
         
         return groups;
     }
+
+    /**
+     * Get children for a group (environments in the group + group management actions)
+     */
+    private async getGroupChildren(groupItem: EnvironmentGroupTreeItem): Promise<TreeItem[]> {
+        try {
+            const children: TreeItem[] = [];
+            
+            // Add group management actions
+            children.push(new AddEnvironmentToGroupActionTreeItem(groupItem.group));
+            children.push(new EditGroupActionTreeItem(groupItem.group));
+            children.push(new GenerateMultiEnvironmentCodeActionTreeItem(groupItem.group));
+            
+            // Add environments in this group
+            const environmentsInGroup = await this.configManager.getEnvironmentsInGroup(groupItem.group.id);
+            
+            if (environmentsInGroup.length === 0) {
+                children.push(new MessageTreeItem(
+                    'No environments in group',
+                    'Drag environments here or use "Add Environment to Group"',
+                    'folder'
+                ));
+            } else {
+                children.push(...environmentsInGroup.map(env => new EnvironmentTreeItem(env)));
+            }
+            
+            return children;
+        } catch (error) {
+            console.error('Failed to load group children:', error);
+            return [new MessageTreeItem('Error loading group', '', 'error')];
+        }
+    }
 }
 
 /**
@@ -266,6 +309,31 @@ export abstract class TreeItem extends vscode.TreeItem {
 }
 
 /**
+ * Tree item representing an environment group
+ */
+class EnvironmentGroupTreeItem extends TreeItem {
+    constructor(public readonly group: ApiEnvironmentGroup) {
+        super(group.name, vscode.TreeItemCollapsibleState.Collapsed);
+        
+        // Set icon with color theme
+        const iconColor = group.color ?? 'blue';
+        this.iconPath = new vscode.ThemeIcon('folder', new vscode.ThemeColor(`charts.${iconColor}`));
+        this.tooltip = `${group.name}\n${group.description ?? 'No description'}\nCreated: ${group.createdAt.toLocaleString()}`;
+        this.description = group.description;
+        
+        // Enable drag and drop
+        this.contextValue = 'environmentGroup';
+        
+        // Command to run when clicked
+        this.command = {
+            command: 'pathfinder.showGroupDetails',
+            title: 'Show Group Details',
+            arguments: [group]
+        };
+    }
+}
+
+/**
  * Tree item representing an API environment
  */
 class EnvironmentTreeItem extends TreeItem {
@@ -277,8 +345,11 @@ class EnvironmentTreeItem extends TreeItem {
         this.tooltip = `${environment.name}\n${environment.baseUrl}\nAuth: ${environment.auth.type}`;
         this.description = environment.baseUrl;
         
-        // Context value enables context menu items
-        this.contextValue = 'environment';
+        // Context value enables context menu items and drag/drop
+        this.contextValue = environment.groupId ? 'environment-grouped' : 'environment';
+        
+        // Enable drag and drop
+        this.resourceUri = vscode.Uri.parse(`pathfinder://environment/${environment.id}`);
         
         // Command to run when clicked (optional - shows environment details)
         this.command = {
@@ -473,6 +544,63 @@ class DuplicateEnvironmentActionTreeItem extends TreeItem {
             command: 'pathfinder.duplicateEnvironment',
             title: 'Duplicate Environment',
             arguments: [environment]
+        };
+    }
+}
+
+/**
+ * Tree item for "Add Environment to Group" action
+ */
+class AddEnvironmentToGroupActionTreeItem extends TreeItem {
+    constructor(public readonly group: ApiEnvironmentGroup) {
+        super('➕ Add Environment to Group', vscode.TreeItemCollapsibleState.None);
+        
+        this.iconPath = new vscode.ThemeIcon('add');
+        this.tooltip = 'Add an existing environment to this group';
+        this.contextValue = 'addEnvironmentToGroupAction';
+        
+        this.command = {
+            command: 'pathfinder.addEnvironmentToGroup',
+            title: 'Add Environment to Group',
+            arguments: [group]
+        };
+    }
+}
+
+/**
+ * Tree item for "Edit Group" action
+ */
+class EditGroupActionTreeItem extends TreeItem {
+    constructor(public readonly group: ApiEnvironmentGroup) {
+        super('✏️ Edit Group', vscode.TreeItemCollapsibleState.None);
+        
+        this.iconPath = new vscode.ThemeIcon('edit');
+        this.tooltip = 'Edit this group\'s settings';
+        this.contextValue = 'editGroupAction';
+        
+        this.command = {
+            command: 'pathfinder.editGroup',
+            title: 'Edit Group',
+            arguments: [group]
+        };
+    }
+}
+
+/**
+ * Tree item for "Generate Multi-Environment Code" action
+ */
+class GenerateMultiEnvironmentCodeActionTreeItem extends TreeItem {
+    constructor(public readonly group: ApiEnvironmentGroup) {
+        super('🚀 Generate Code for All Environments', vscode.TreeItemCollapsibleState.None);
+        
+        this.iconPath = new vscode.ThemeIcon('rocket');
+        this.tooltip = 'Generate commands for all environments in this group';
+        this.contextValue = 'generateMultiEnvironmentCodeAction';
+        
+        this.command = {
+            command: 'pathfinder.generateMultiEnvironmentCode',
+            title: 'Generate Multi-Environment Code',
+            arguments: [group]
         };
     }
 }
