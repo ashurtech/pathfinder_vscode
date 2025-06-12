@@ -17,6 +17,55 @@ import { LoadedSchema, ApiEnvironment, ApiEndpoint, ApiParameter } from './types
 const SwaggerParser = require('swagger-parser');
 
 /**
+ * Helper function to break circular references in an object
+ * This is needed because SwaggerParser.parse() can create circular references
+ * when resolving $ref references, which breaks JSON serialization for storage
+ */
+function breakCircularReferences(obj: any, seen = new WeakSet(), path = ''): any {
+    if (obj === null || typeof obj !== 'object') {
+        return obj;
+    }
+    
+    if (seen.has(obj)) {
+        // Return a reference marker instead of the circular object
+        return { 
+            $circular: true, 
+            $ref: obj.constructor?.name ?? 'Object',
+            $path: path
+        };
+    }
+    
+    seen.add(obj);
+    
+    try {
+        if (Array.isArray(obj)) {
+            const result = obj.map((item, index) => 
+                breakCircularReferences(item, seen, `${path}[${index}]`)
+            );
+            seen.delete(obj);
+            return result;
+        }
+        
+        const cleaned: any = {};
+        for (const [key, value] of Object.entries(obj)) {
+            const newPath = path ? `${path}.${key}` : key;
+            cleaned[key] = breakCircularReferences(value, seen, newPath);
+        }
+        
+        seen.delete(obj);
+        return cleaned;
+    } catch (error) {
+        seen.delete(obj);
+        // If we can't process this object, return a safe placeholder
+        return { 
+            $error: true, 
+            $message: 'Could not process object due to complexity',
+            $type: obj.constructor?.name ?? 'Object'
+        };
+    }
+}
+
+/**
  * Handles loading and parsing OpenAPI schemas
  */
 export class SchemaLoader {
@@ -143,16 +192,42 @@ export class SchemaLoader {
             validationErrors: [] as string[]
         };
 
-        try {
-            // First try to parse without strict validation
+        try {            // First try to parse without strict validation
             const api = await SwaggerParser.parse(schemaData);
             
             // Ensure we have an OpenAPI 3.x document
             if (!api.openapi?.startsWith('3.')) {
                 throw new Error('Only OpenAPI 3.x specifications are supported');
+            }            // Clean the schema to remove circular references before storing
+            try {
+                const cleanedSchema = breakCircularReferences(api);
+                
+                // Test if the cleaned schema can be serialized (for storage)
+                try {
+                    JSON.stringify(cleanedSchema);
+                    result.schema = cleanedSchema;
+                } catch (serializationError) {
+                    console.warn('⚠️ Cleaned schema still cannot be serialized, using minimal schema');
+                    // Create a minimal, safe schema that preserves essential information
+                    result.schema = {
+                        openapi: api.openapi,
+                        info: api.info,
+                        paths: api.paths ? breakCircularReferences(api.paths) : {},
+                        components: api.components ? breakCircularReferences(api.components) : undefined,
+                        servers: api.servers
+                    } as OpenAPIV3.Document;
+                    result.validationErrors.push('Warning: Schema was simplified due to complexity');
+                }
+            } catch (cleaningError) {
+                console.warn('⚠️ Failed to clean circular references, using minimal schema:', cleaningError);                // Fallback: create a minimal schema with just the essential parts
+                result.schema = {
+                    openapi: api.openapi ?? '3.0.0',
+                    info: api.info ?? { title: 'Unknown API', version: '1.0.0' },
+                    paths: api.paths ?? {},
+                    servers: api.servers
+                } as OpenAPIV3.Document;
+                result.validationErrors.push('Warning: Schema was simplified due to circular references');
             }
-
-            result.schema = api;
 
             // Try strict validation, but if it fails, still return the parsed schema
             try {
@@ -171,11 +246,12 @@ export class SchemaLoader {
             
         } catch (error) {
             console.error('Schema parsing failed:', error);
-            
-            // If parsing completely fails, try to extract what we can
+              // If parsing completely fails, try to extract what we can
             if (typeof schemaData === 'object' && schemaData.openapi) {
                 console.warn('⚠️ Using schema with limited parsing due to errors');
-                result.schema = schemaData as OpenAPIV3.Document;
+                // Clean the raw schema data too in case it has circular references
+                const cleanedRawSchema = breakCircularReferences(schemaData);
+                result.schema = cleanedRawSchema as OpenAPIV3.Document;
                 result.isValid = false;
                 result.validationErrors.push(this.getErrorMessage(error));
                 return result;
