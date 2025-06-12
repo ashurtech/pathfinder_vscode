@@ -555,8 +555,17 @@ async function loadSchemaFromUrlHandler(environment?: ApiEnvironment) {
                     `Endpoints: ${info.endpointCount}`
                 );
             } else {
-                vscode.window.showErrorMessage(
-                    `❌ Schema failed to load:\n${loadedSchema.validationErrors?.join('\n')}`
+                // Schema loaded but has validation issues - show as warning, not error
+                const info = schemaLoader.getSchemaInfo(loadedSchema.schema);
+                const errorCount = loadedSchema.validationErrors?.length ?? 0;
+                const errorSummary = errorCount > 3 
+                    ? `${loadedSchema.validationErrors?.slice(0, 3).join(', ')} (and ${errorCount - 3} more)`
+                    : loadedSchema.validationErrors?.join(', ') ?? 'Unknown validation issues';
+                
+                vscode.window.showWarningMessage(
+                    `⚠️ Schema loaded with validation warnings:\n` +
+                    `API: ${info.title} v${info.version} (${info.endpointCount} endpoints)\n` +
+                    `${errorCount} validation issue(s): ${errorSummary}`
                 );
             }
         });
@@ -645,8 +654,17 @@ async function loadSchemaFromFileHandler(environment?: ApiEnvironment) {
                     `Endpoints: ${info.endpointCount}`
                 );
             } else {
-                vscode.window.showErrorMessage(
-                    `❌ Schema failed to load:\n${loadedSchema.validationErrors?.join('\n')}`
+                // Schema loaded but has validation issues - show as warning, not error
+                const info = schemaLoader.getSchemaInfo(loadedSchema.schema);
+                const errorCount = loadedSchema.validationErrors?.length ?? 0;
+                const errorSummary = errorCount > 3 
+                    ? `${loadedSchema.validationErrors?.slice(0, 3).join(', ')} (and ${errorCount - 3} more)`
+                    : loadedSchema.validationErrors?.join(', ') ?? 'Unknown validation issues';
+                
+                vscode.window.showWarningMessage(
+                    `⚠️ Schema loaded with validation warnings:\n` +
+                    `API: ${info.title} v${info.version} (${info.endpointCount} endpoints)\n` +
+                    `${errorCount} validation issue(s): ${errorSummary}`
                 );
             }
         });
