@@ -2,6 +2,12 @@
 
 A VS Code extension to assist developers working with REST APIs that provide OpenAPI (Swagger) schemas. This project serves as both a useful tool and an educational resource for learning VS Code extension development.
 
+As a model use-case, I personally would like to be able to load the openapi schema for Kibana, then in a ui element browse through the available api commands.
+I work with a number of different Kibana instances so I'd like to be able to setup a number of APi environments, with a base API url (https://kibana.apac-test-1.sand.wtg.zone,https://kibana.emea-test-1.sand.wtg.zone etc), each with their own credentials or API key. Then when browsing through the commands have an option to generate a command with the example body (if any) in an editor window.
+In the editor window we should be able to have autocompletion for the valid parameters and basic type checking.
+It would be especially cool if we can choose to generate the command in differint formats (curl, Ansible uri, Powershell, maybe others if do-able.)
+As a sort of bonus goal it would be even better if we could execute the command and return the results in vscode also,, but this is a nice to have.
+
 ## 🎯 Purpose
 
 This extension helps developers:
@@ -162,7 +168,7 @@ This is an educational project! Contributions that help with learning are welcom
 
 ## 📝 License
 
-MIT License - feel free to use this code for learning and building your own extensions.
+MIT License - feel e to use this code for learning and building your own extensions.
 
 ## 🔗 Useful Resources
 

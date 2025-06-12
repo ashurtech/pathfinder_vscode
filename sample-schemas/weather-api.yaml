@@ -1,0 +1,105 @@
+openapi: 3.0.1
+info:
+  title: Weather API
+  description: A simple weather API for testing purposes
+  version: 1.0.0
+servers:
+  - url: https://api.weather.example.com/v1
+    description: Production server
+paths:
+  /weather:
+    get:
+      tags:
+        - Weather
+      summary: Get current weather
+      description: Returns current weather information for a location
+      parameters:
+        - name: city
+          in: query
+          required: true
+          description: City name
+          schema:
+            type: string
+            example: "London"
+        - name: units
+          in: query
+          required: false
+          description: Temperature units
+          schema:
+            type: string
+            enum: [celsius, fahrenheit]
+            default: celsius
+      responses:
+        '200':
+          description: Weather information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  city:
+                    type: string
+                    example: "London"
+                  temperature:
+                    type: number
+                    example: 22.5
+                  humidity:
+                    type: number
+                    example: 65
+                  description:
+                    type: string
+                    example: "Partly cloudy"
+        '400':
+          description: Bad request
+        '404':
+          description: City not found
+  /forecast:
+    get:
+      tags:
+        - Weather
+      summary: Get weather forecast
+      description: Returns weather forecast for the next 5 days
+      parameters:
+        - name: city
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+            default: 3
+      responses:
+        '200':
+          description: Forecast information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  city:
+                    type: string
+                  forecast:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date:
+                          type: string
+                          format: date
+                        temperature:
+                          type: number
+                        description:
+                          type: string
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+security:
+  - ApiKeyAuth: []
