@@ -532,23 +532,29 @@ class EndpointTreeItem extends TreeItem {
         public readonly endpoint: ApiEndpoint,
         public readonly schemaItem: SchemaTreeItem
     ) {
-        const label = `${endpoint.method} ${endpoint.path}`;
-        super(label, vscode.TreeItemCollapsibleState.Collapsed); // Changed to Collapsed
-        
-        // Set icon based on HTTP method
-        this.iconPath = this.getMethodIcon(endpoint.method);
-        this.tooltip = `${endpoint.method} ${endpoint.path}\n${endpoint.summary ?? 'No description'}\n\nClick to expand actions`;
+        // Compose a standout label: method, path, and all-caps method
+        const method = endpoint.method.toUpperCase();
+        const label = `[${method}] ${endpoint.path}`;
+        super(label, vscode.TreeItemCollapsibleState.Collapsed);
+
+        // Set icon and color based on HTTP method (colored ThemeIcon only)
+        this.iconPath = EndpointTreeItem.getMethodIcon(method);
+        this.tooltip = `${method} ${endpoint.path}\n${endpoint.summary ?? 'No description'}\n\nClick to expand actions`;
         this.description = endpoint.summary;
         this.contextValue = 'endpoint';
-        
-        // Remove the command - let users expand the tree instead
-        // this.command = { ... };
     }
-    
-    /**
-     * Get appropriate icon for HTTP method
-     */
-    private getMethodIcon(method: string): vscode.ThemeIcon {
+
+    // Use a colored icon for each HTTP method
+    private static getMethodIcon(method: string): vscode.ThemeIcon {
+        const colorMap: { [key: string]: string } = {
+            'GET': 'charts.green',
+            'POST': 'charts.blue',
+            'PUT': 'charts.yellow',
+            'DELETE': 'charts.red',
+            'PATCH': 'charts.purple',
+            'HEAD': 'charts.orange',
+            'OPTIONS': 'charts.gray'
+        };
         const iconMap: { [key: string]: string } = {
             'GET': 'arrow-down',
             'POST': 'add',
@@ -558,8 +564,7 @@ class EndpointTreeItem extends TreeItem {
             'HEAD': 'eye',
             'OPTIONS': 'question'
         };
-        
-        return new vscode.ThemeIcon(iconMap[method] ?? 'circle-outline');
+        return new vscode.ThemeIcon(iconMap[method] ?? 'circle-outline', new vscode.ThemeColor(colorMap[method] ?? 'foreground'));
     }
 }
 
@@ -575,17 +580,37 @@ class EndpointActionTreeItem extends TreeItem {
         public readonly commandArgs: any[]
     ) {
         super(actionLabel, vscode.TreeItemCollapsibleState.None);
-        
-        this.iconPath = new vscode.ThemeIcon(iconName);
+        // Use colored ThemeIcon if available
+        this.iconPath = EndpointActionTreeItem.getColoredIcon(iconName);
         this.tooltip = actionTooltip;
         this.contextValue = 'endpointAction';
-        
-        // Command to run when clicked
         this.command = {
             command: commandId,
             title: actionLabel,
             arguments: commandArgs
         };
+    }
+    private static getColoredIcon(iconName: string): vscode.ThemeIcon {
+        // Map to colored theme icons for common actions
+        const colorMap: { [key: string]: string } = {
+            'info': 'charts.blue',
+            'terminal': 'charts.green',
+            'settings-gear': 'charts.yellow',
+            'terminal-powershell': 'charts.purple',
+            'symbol-method': 'charts.orange',
+            'symbol-function': 'charts.gray',
+            'play': 'charts.green',
+            'add': 'charts.blue',
+            'edit': 'charts.yellow',
+            'trash': 'charts.red',
+            'copy': 'charts.purple',
+            'folder': 'charts.yellow',
+            'rocket': 'charts.green',
+            'tag': 'charts.orange',
+            'eye': 'charts.cyan',
+            'question': 'charts.gray'
+        };
+        return new vscode.ThemeIcon(iconName, new vscode.ThemeColor(colorMap[iconName] ?? 'foreground'));
     }
 }
 
