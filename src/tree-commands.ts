@@ -16,7 +16,7 @@ let skipDeleteConfirmation = false;
  * Utility: Confirm before running a DELETE command, with option to skip for session
  */
 export async function confirmDeleteAction(message: string): Promise<boolean> {
-    if (skipDeleteConfirmation) return true;
+    if (skipDeleteConfirmation){return true;}
     const result = await vscode.window.showWarningMessage(
         message + '\nThis action cannot be undone.',
         { modal: true },
@@ -100,24 +100,24 @@ function getPlatformAuthHeader(auth: any, platformConfig: RequestGeneratorConfig
  * Show detailed information about an environment when clicked in tree
  */
 export async function showEnvironmentDetailsCommand(environment: ApiEnvironment) {
+    // Use ASCII dividers and all-caps section headers, no markdown headers
     const details = [
-        `${environment.name}`,
-        `${'='.repeat(environment.name.length)}`,
+        `╔════════════════════════════════════════════════════════════╗`,
+        ` ENVIRONMENT DETAILS`,
+        `╚════════════════════════════════════════════════════════════╝`,
         '',
-        `Base URL: ${environment.baseUrl}`,
-        `Authentication: ${environment.auth.type}`,
-        `Created: ${environment.createdAt.toLocaleString()}`,
-        environment.lastUsed ? `Last Used: ${environment.lastUsed.toLocaleString()}` : 'Never used',
+        `Name:         ${environment.name}`,
+        `Base URL:     ${environment.baseUrl}`,
+        `Auth Type:    ${environment.auth.type}`,
+        `Created:      ${environment.createdAt.toLocaleString()}`,
+        environment.lastUsed ? `Last Used:    ${environment.lastUsed.toLocaleString()}` : 'Last Used:   Never used',
+        environment.description ? `Description:  ${environment.description}` : '',
         '',
-        environment.description ? `Description: ${environment.description}` : ''
     ].filter(line => line !== '').join('\n');
-    
-    // Show in a new untitled document with plain text (no annoying markdown linting)
     const doc = await vscode.workspace.openTextDocument({
         content: details,
         language: 'plaintext'
     });
-    
     await vscode.window.showTextDocument(doc);
 }
 
@@ -127,29 +127,32 @@ export async function showEnvironmentDetailsCommand(environment: ApiEnvironment)
 export async function showSchemaDetailsCommand(schema: LoadedSchema) {
     const schemaLoader = new SchemaLoader();
     const info = schemaLoader.getSchemaInfo(schema.schema);
-    
     const details = [
-        `${info.title} v${info.version}`,
-        `${'='.repeat(`${info.title} v${info.version}`.length)}`,
+        `╔════════════════════════════════════════════════════════════╗`,
+        ` SCHEMA DETAILS`,
+        `╚════════════════════════════════════════════════════════════╝`,
         '',
-        info.description ? `Description: ${info.description}` : '',
-        `Servers: ${info.serverCount}`,
-        `Paths: ${info.pathCount}`,
-        `Endpoints: ${info.endpointCount}`,
+        `Title:        ${info.title}`,
+        `Version:      ${info.version}`,
+        info.description ? `Description:   ${info.description}` : '',
+        `Servers:      ${info.serverCount}`,
+        `Paths:        ${info.pathCount}`,
+        `Endpoints:    ${info.endpointCount}`,
         '',
-        `Source: ${schema.source}`,
-        `Loaded: ${schema.loadedAt.toLocaleString()}`,
-        `Valid: ${schema.isValid ? '✅ Yes' : '❌ No'}`,
+        `Source:       ${schema.source}`,
+        `Loaded:       ${schema.loadedAt.toLocaleString()}`,
+        `Valid:        ${schema.isValid ? 'YES' : 'NO'}`,
         '',
         schema.validationErrors && schema.validationErrors.length > 0 ? 
-            `Validation Errors:\n${schema.validationErrors.map(err => `• ${err}`).join('\n')}` : ''
+            [
+                'Validation Errors:',
+                ...schema.validationErrors.map(err => `  - ${err}`)
+            ].join('\n') : ''
     ].filter(line => line !== '').join('\n');
-    
     const doc = await vscode.workspace.openTextDocument({
         content: details,
         language: 'plaintext'
     });
-    
     await vscode.window.showTextDocument(doc);
 }
 
@@ -158,8 +161,7 @@ export async function showSchemaDetailsCommand(schema: LoadedSchema) {
  */
 export async function showEndpointDetailsCommand(endpoint: ApiEndpoint, schemaItem: any) {
     // Compose the HTTP request line
-    const requestLine = `${endpoint.method} ${endpoint.path}`;
-    const baseUrl = schemaItem?.environment?.baseUrl || '';
+    const baseUrl = schemaItem?.environment?.baseUrl ?? '';
     const fullUrl = baseUrl ? `${baseUrl}${endpoint.path}` : endpoint.path;
 
     // Compose headers for http syntax highlighting
@@ -181,60 +183,60 @@ export async function showEndpointDetailsCommand(endpoint: ApiEndpoint, schemaIt
 
     // Build the http-formatted request preview with enhanced formatting
     let httpPreview = '';
-    httpPreview += `# ╔════════════════════════════════════════════════════════════╗\n`;
-    httpPreview += `# 🚩 API REQUEST PREVIEW\n`;
-    httpPreview += `# ╚════════════════════════════════════════════════════════════╝\n`;
+    httpPreview += `╔════════════════════════════════════════════════════════════╗\n`;
+    httpPreview += ` API REQUEST PREVIEW\n`;
+    httpPreview += `╚════════════════════════════════════════════════════════════╝\n`;
     httpPreview += `\n`;
     if (endpoint.summary) {
-        httpPreview += `# 📄 ${endpoint.summary.toUpperCase()}\n`;
+        httpPreview += `• ${endpoint.summary.toUpperCase()}\n`;
     }
-    httpPreview += `# ----------------------------------------------------------\n`;
-    httpPreview += `# REQUEST LINE\n`;
+    httpPreview += `------------------------------------------------------------\n`;
+    httpPreview += `REQUEST LINE\n`;
     httpPreview += `${endpoint.method} ${fullUrl}\n`;
     if (headers.length) {
-        httpPreview += `\n# HEADERS\n`;
+        httpPreview += `\nHEADERS\n`;
         httpPreview += headers.map(h => h).join('\n') + '\n';
     }
     if (body) {
-        httpPreview += `\n# BODY\n`;
+        httpPreview += `\nBODY\n`;
         httpPreview += body + '\n';
     }
-    httpPreview += `\n# ==========================================================\n`;
+    httpPreview += `\n============================================================\n`;
 
     // Add details section with clear, visually distinct headings
     let details = '';
-    details += `\n# ╔════════════════════════════════════════════════════════════╗\n`;
-    details += `# 📦 ENDPOINT DETAILS\n`;
-    details += `# ╚════════════════════════════════════════════════════════════╝\n`;
-    details += `\n# 📝 DESCRIPTION\n`;
-    details += `#   ${endpoint.description || 'No description'}\n`;
+    details += `\n╔════════════════════════════════════════════════════════════╗\n`;
+    details += ` ENDPOINT DETAILS\n`;
+    details += `╚════════════════════════════════════════════════════════════╝\n`;
+    details += `\nDESCRIPTION\n`;
+    details += `  ${endpoint.description ?? 'No description'}\n`;
     if (endpoint.operationId) {
-        details += `#\n# 🆔 OPERATION ID\n`;
-        details += `#   ${endpoint.operationId}\n`;
+        details += `\nOPERATION ID\n`;
+        details += `  ${endpoint.operationId}\n`;
     }
     if (endpoint.tags && endpoint.tags.length > 0) {
-        details += `#\n# 🏷️ TAGS\n`;
-        details += `#   ${endpoint.tags.join(', ')}\n`;
+        details += `\nTAGS\n`;
+        details += `  ${endpoint.tags.join(', ')}\n`;
     }
-    details += `#\n# 🔑 PARAMETERS`;
+    details += `\nPARAMETERS`;
     if (endpoint.parameters && endpoint.parameters.length > 0) {
         details += '\n';
         details += endpoint.parameters.map(param =>
-            `#   - ${param.name} (${param.in}) ${param.required ? '[REQUIRED]' : '[OPTIONAL]'}: ${param.description || 'No description'}`
+            `  - ${param.name} (${param.in}) ${param.required ? '[REQUIRED]' : '[OPTIONAL]'}: ${param.description ?? 'No description'}`
         ).join('\n');
     } else {
         details += '  None';
     }
-    details += '\n#\n# 📬 RESPONSES:';
+    details += '\n\nRESPONSES:';
     if (endpoint.responses) {
         details += '\n';
         details += Object.entries(endpoint.responses).map(([code, response]) =>
-            `#   - ${code}: ${typeof response === 'object' ? JSON.stringify(response, null, 2) : response}`
+            `  - ${code}: ${typeof response === 'object' ? JSON.stringify(response, null, 2) : response}`
         ).join('\n');
     } else {
         details += '  None';
     }
-    details += '\n# ==========================================================\n';
+    details += '\n============================================================\n';
 
     // Combine for display
     const content = `${httpPreview}\n${details}`;
@@ -304,18 +306,14 @@ export async function generateCodeForEndpointCommand(endpoint: ApiEndpoint, sche
  * Test an endpoint by making a real request
  */
 export async function testEndpointCommand(endpoint: ApiEndpoint, schemaItem: any) {
-    const environment = schemaItem.environment;
-    
     // Show a simple dialog for now - we can expand this later
     const result = await vscode.window.showInformationMessage(
         `Test ${endpoint.method} ${endpoint.path}?`,
         { modal: true },
         'Test Now', 'Cancel'
     );
-    
     if (result === 'Test Now') {
         vscode.window.showInformationMessage('Endpoint testing coming soon! 🚀');
-        // TODO: Implement actual HTTP request testing
     }
 }
 
