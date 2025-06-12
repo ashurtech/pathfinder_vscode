@@ -55,14 +55,15 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             // Root level - return all environments
             return this.getEnvironments();
         }
-        
-        // Handle different types of tree items
+          // Handle different types of tree items
         if (element instanceof EnvironmentTreeItem) {
             return this.getEnvironmentChildren(element);
         } else if (element instanceof SchemaTreeItem) {
             return this.getSchemaChildren(element);
         } else if (element instanceof TagTreeItem) {
             return this.getTagChildren(element);
+        } else if (element instanceof EndpointTreeItem) {
+            return this.getEndpointChildren(element);
         }
         
         return [];
@@ -151,14 +152,73 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem> {
             return [new MessageTreeItem('Error extracting endpoints', '', 'error')];
         }
     }
-    
-    /**
+      /**
      * Get children for a tag (the endpoints in that tag)
      */
     private getTagChildren(tagItem: TagTreeItem): TreeItem[] {
         return tagItem.endpoints.map(endpoint => 
             new EndpointTreeItem(endpoint, tagItem.schemaItem)
         );
+    }
+
+    /**
+     * Get children for an endpoint (action items like "View Details", "Generate cURL", etc.)
+     */
+    private getEndpointChildren(endpointItem: EndpointTreeItem): TreeItem[] {
+        const endpoint = endpointItem.endpoint;
+        const schemaItem = endpointItem.schemaItem;
+        
+        return [
+            new EndpointActionTreeItem(
+                '📋 View Full Details',
+                'Show complete endpoint information',
+                'api-helper-extension.showEndpointDetails',
+                'info',
+                [endpoint, schemaItem]
+            ),
+            new EndpointActionTreeItem(
+                '💻 Generate cURL',
+                'Generate cURL command for this endpoint',
+                'api-helper-extension.generateCurl',
+                'terminal',
+                [endpoint, schemaItem]
+            ),
+            new EndpointActionTreeItem(
+                '🔧 Generate Ansible',
+                'Generate Ansible task for this endpoint',
+                'api-helper-extension.generateAnsible',
+                'settings-gear',
+                [endpoint, schemaItem]
+            ),
+            new EndpointActionTreeItem(
+                '⚡ Generate PowerShell',
+                'Generate PowerShell script for this endpoint',
+                'api-helper-extension.generatePowerShell',
+                'terminal-powershell',
+                [endpoint, schemaItem]
+            ),
+            new EndpointActionTreeItem(
+                '🐍 Generate Python',
+                'Generate Python requests code for this endpoint',
+                'api-helper-extension.generatePython',
+                'symbol-method',
+                [endpoint, schemaItem]
+            ),
+            new EndpointActionTreeItem(
+                '📜 Generate JavaScript',
+                'Generate JavaScript fetch code for this endpoint',
+                'api-helper-extension.generateJavaScript',
+                'symbol-function',
+                [endpoint, schemaItem]
+            ),
+            new EndpointActionTreeItem(
+                '🧪 Test Endpoint',
+                'Execute a test request to this endpoint',
+                'api-helper-extension.testEndpoint',
+                'beaker',
+                [endpoint, schemaItem]
+            )
+        ];
     }
     
     /**
@@ -272,20 +332,16 @@ class EndpointTreeItem extends TreeItem {
         public readonly schemaItem: SchemaTreeItem
     ) {
         const label = `${endpoint.method} ${endpoint.path}`;
-        super(label, vscode.TreeItemCollapsibleState.None);
+        super(label, vscode.TreeItemCollapsibleState.Collapsed); // Changed to Collapsed
         
         // Set icon based on HTTP method
         this.iconPath = this.getMethodIcon(endpoint.method);
-        this.tooltip = `${endpoint.method} ${endpoint.path}\n${endpoint.summary || 'No description'}`;
+        this.tooltip = `${endpoint.method} ${endpoint.path}\n${endpoint.summary ?? 'No description'}\n\nClick to expand actions`;
         this.description = endpoint.summary;
         this.contextValue = 'endpoint';
         
-        // Command to show endpoint details when clicked
-        this.command = {
-            command: 'api-helper-extension.showEndpointDetails',
-            title: 'Show Endpoint Details',
-            arguments: [endpoint, schemaItem]
-        };
+        // Remove the command - let users expand the tree instead
+        // this.command = { ... };
     }
     
     /**
@@ -302,7 +358,33 @@ class EndpointTreeItem extends TreeItem {
             'OPTIONS': 'question'
         };
         
-        return new vscode.ThemeIcon(iconMap[method] || 'circle-outline');
+        return new vscode.ThemeIcon(iconMap[method] ?? 'circle-outline');
+    }
+}
+
+/**
+ * Tree item representing an action that can be performed on an endpoint
+ */
+class EndpointActionTreeItem extends TreeItem {
+    constructor(
+        public readonly actionLabel: string,
+        public readonly actionTooltip: string,
+        public readonly commandId: string,
+        public readonly iconName: string,
+        public readonly commandArgs: any[]
+    ) {
+        super(actionLabel, vscode.TreeItemCollapsibleState.None);
+        
+        this.iconPath = new vscode.ThemeIcon(iconName);
+        this.tooltip = actionTooltip;
+        this.contextValue = 'endpointAction';
+        
+        // Command to run when clicked
+        this.command = {
+            command: commandId,
+            title: actionLabel,
+            arguments: commandArgs
+        };
     }
 }
 

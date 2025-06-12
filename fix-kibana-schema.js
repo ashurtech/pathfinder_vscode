@@ -89,9 +89,7 @@ try {
                 fixCount++;
             }
         }
-    }
-
-    // Fix 4: Synthetics_getParameterResponse - null required field
+    }    // Fix 4: Synthetics_getParameterResponse - null required field
     console.log('🔧 Fix 4: Checking Synthetics_getParameterResponse schema...');
     if (schema.components?.schemas?.Synthetics_getParameterResponse?.required !== undefined) {
         const required = schema.components.schemas.Synthetics_getParameterResponse.required;
@@ -105,6 +103,40 @@ try {
             fixCount++;
         }
     }
+
+    // Fix 5: Synthetics_httpMonitorFields - fix "objects" enum value to "object"
+    console.log('🔧 Fix 5: Checking for invalid "objects" enum values...');
+    
+    function fixObjectsEnum(obj, path = '') {
+        if (obj && typeof obj === 'object') {
+            if (Array.isArray(obj)) {
+                for (let i = 0; i < obj.length; i++) {
+                    if (obj[i] === 'objects') {
+                        console.log(`   ❌ Found "objects" enum at ${path}[${i}]`);
+                        obj[i] = 'object';
+                        console.log(`   ✅ Fixed to "object"`);
+                        fixCount++;
+                    } else {
+                        fixObjectsEnum(obj[i], `${path}[${i}]`);
+                    }
+                }
+            } else {
+                for (const [key, value] of Object.entries(obj)) {
+                    if (value === 'objects') {
+                        console.log(`   ❌ Found "objects" value at ${path}.${key}`);
+                        obj[key] = 'object';
+                        console.log(`   ✅ Fixed to "object"`);
+                        fixCount++;
+                    } else {
+                        fixObjectsEnum(value, path ? `${path}.${key}` : key);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Apply the fix recursively to the entire schema
+    fixObjectsEnum(schema, 'schema');
 
     // Write the fixed schema
     if (fixCount > 0) {

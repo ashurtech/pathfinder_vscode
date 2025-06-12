@@ -29,17 +29,31 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 - `API Helper: Show Schema Information` - Display details about loaded schemas
 - `API Helper: Show Storage Statistics` - Debug information about stored data
 - **`API Helper: Refresh` - Refresh the tree view**
-- **Tree item actions - Click environments, schemas, and endpoints for details**
+- **Endpoint action commands:**
+  - **📋 View Full Details** - Complete endpoint information in markdown
+  - **💻 Generate cURL** - Command-line HTTP requests
+  - **🔧 Generate Ansible** - YAML automation tasks
+  - **⚡ Generate PowerShell** - Windows PowerShell scripts  
+  - **🐍 Generate Python** - Python requests library code
+  - **📜 Generate JavaScript** - Modern fetch API code
+  - **🧪 Test Endpoint** - Live API request testing
 
 ### Tree View Features
 
 - **📁 Environment nodes** - Show all configured API environments
 - **📄 Schema nodes** - Display loaded OpenAPI schemas under each environment  
 - **🏷️ Tag grouping** - Organize endpoints by OpenAPI tags
-- **🔗 Endpoint nodes** - Individual API endpoints with HTTP method icons
-- **📝 Click to view details** - Click any item to see detailed information
+- **🔗 Endpoint nodes** - Individual API endpoints with HTTP method icons (expandable)
+- **📋 Endpoint actions** - Expand endpoints to reveal action options:
+  - **📋 View Full Details** - Complete endpoint documentation
+  - **💻 Generate cURL** - Command-line HTTP requests
+  - **🔧 Generate Ansible** - Infrastructure automation tasks
+  - **⚡ Generate PowerShell** - Windows scripting
+  - **🐍 Generate Python** - Python requests code
+  - **📜 Generate JavaScript** - Modern fetch API code
+  - **🧪 Test Endpoint** - Execute live API requests
 - **🔄 Auto-refresh** - Tree updates when environments/schemas change
-- **⚡ Context menus** - Right-click actions for generating code
+- **⚡ Improved UX** - Click to expand, not overwhelm with information
 
 ### Technical Implementation
 
@@ -53,8 +67,11 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 ### In Progress
 
 - **✅ Tree view for browsing API endpoints - COMPLETED!**
-- Code generation for different formats (curl, Ansible, PowerShell)
+- **✅ Expandable endpoint actions with code generation - COMPLETED!**
+- **✅ Multi-format code generation (cURL, Ansible, PowerShell, Python, JS) - COMPLETED!**
+- **✅ Improved schema parsing with graceful error handling - COMPLETED!**
 - API execution and response handling
+- Advanced endpoint testing features
 
 ### Configuration Settings
 

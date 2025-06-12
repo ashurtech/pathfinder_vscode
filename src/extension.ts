@@ -11,7 +11,7 @@ import * as vscode from 'vscode';
 import { ConfigurationManager } from './configuration';
 import { SchemaLoader } from './schema-loader';
 import { ApiTreeProvider } from './tree-provider';
-import { showEnvironmentDetailsCommand, showSchemaDetailsCommand, showEndpointDetailsCommand, generateCodeForEndpointCommand } from './tree-commands';
+import { showEnvironmentDetailsCommand, showSchemaDetailsCommand, showEndpointDetailsCommand, generateCodeForEndpointCommand, testEndpointCommand } from './tree-commands';
 import { ApiEnvironment } from './types';
 
 // Global instances that will be used throughout the extension
@@ -153,6 +153,40 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
     );
     
     // ========================
+    // Code Generation Commands
+    // ========================
+    
+    const generateCurlCmd = vscode.commands.registerCommand(
+        'api-helper-extension.generateCurl',
+        (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'curl')
+    );
+    
+    const generateAnsibleCmd = vscode.commands.registerCommand(
+        'api-helper-extension.generateAnsible',
+        (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'ansible')
+    );
+    
+    const generatePowerShellCmd = vscode.commands.registerCommand(
+        'api-helper-extension.generatePowerShell',
+        (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'powershell')
+    );
+    
+    const generatePythonCmd = vscode.commands.registerCommand(
+        'api-helper-extension.generatePython',
+        (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'python')
+    );
+    
+    const generateJavaScriptCmd = vscode.commands.registerCommand(
+        'api-helper-extension.generateJavaScript',
+        (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'javascript')
+    );
+    
+    const testEndpointCmd = vscode.commands.registerCommand(
+        'api-helper-extension.testEndpoint',
+        testEndpointCommand
+    );
+    
+    // ========================
     // Tree View Refresh Commands
     // ========================
     
@@ -167,6 +201,12 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
         showSchemaDetailsCmd,
         showEndpointDetailsCmd,
         generateCodeCmd,
+        generateCurlCmd,
+        generateAnsibleCmd,
+        generatePowerShellCmd,
+        generatePythonCmd,
+        generateJavaScriptCmd,
+        testEndpointCmd,
         refreshTreeCmd
     );
 }

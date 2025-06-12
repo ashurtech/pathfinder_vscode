@@ -37,9 +37,8 @@ export class SchemaLoader {
             // Add authentication headers based on environment config
             if (environment.auth.type === 'bearer' && environment.auth.bearerToken) {
                 headers.Authorization = `Bearer ${environment.auth.bearerToken}`;
-            } else if (environment.auth.type === 'apikey' && environment.auth.apiKey) {
-                if (environment.auth.apiKeyLocation === 'header') {
-                    headers[environment.auth.apiKeyName || 'X-API-Key'] = environment.auth.apiKey;
+            } else if (environment.auth.type === 'apikey' && environment.auth.apiKey) {                if (environment.auth.apiKeyLocation === 'header') {
+                    headers[environment.auth.apiKeyName ?? 'X-API-Key'] = environment.auth.apiKey;
                 }
                 // Note: Query parameters for API keys would be handled in the URL
             } else if (environment.auth.type === 'basic' && environment.auth.username && environment.auth.password) {
@@ -55,17 +54,16 @@ export class SchemaLoader {
                     'Accept': 'application/json, application/yaml, text/yaml'
                 }
             });
-            
-            // Parse and validate the schema using swagger-parser
-            const parsedSchema = await this.parseAndValidateSchema(response.data);
+              // Parse and validate the schema using swagger-parser
+            const result = await this.parseAndValidateSchema(response.data);
             
             return {
                 environmentId: environment.id,
-                schema: parsedSchema,
+                schema: result.schema,
                 source: url,
                 loadedAt: new Date(),
-                isValid: true,
-                validationErrors: []
+                isValid: result.isValid,
+                validationErrors: result.validationErrors
             };
             
         } catch (error) {
@@ -106,17 +104,16 @@ export class SchemaLoader {
                 // If JSON parsing fails, swagger-parser will handle YAML
                 schemaData = contentString;
             }
-            
-            // Parse and validate the schema
-            const parsedSchema = await this.parseAndValidateSchema(schemaData);
+              // Parse and validate the schema
+            const result = await this.parseAndValidateSchema(schemaData);
             
             return {
                 environmentId: environment.id,
-                schema: parsedSchema,
+                schema: result.schema,
                 source: filePath,
                 loadedAt: new Date(),
-                isValid: true,
-                validationErrors: []
+                isValid: result.isValid,
+                validationErrors: result.validationErrors
             };
             
         } catch (error) {
@@ -131,30 +128,90 @@ export class SchemaLoader {
                 validationErrors: [this.getErrorMessage(error)]
             };
         }
-    }
-    
-    /**
+    }    /**
      * Parse and validate an OpenAPI schema using swagger-parser
      * @param schemaData The raw schema data (object or string)
      */
-    private async parseAndValidateSchema(schemaData: any): Promise<OpenAPIV3.Document> {
-        try {            // swagger-parser does all the heavy lifting:
-            // - Validates the schema against OpenAPI specification
-            // - Resolves $ref references (including external ones)
-            // - Converts OpenAPI 2.0 (Swagger) to OpenAPI 3.0 if needed
-            const api = await SwaggerParser.validate(schemaData);
+    private async parseAndValidateSchema(schemaData: any): Promise<{
+        schema: OpenAPIV3.Document;
+        isValid: boolean;
+        validationErrors: string[];
+    }> {
+        const result = {
+            schema: {} as OpenAPIV3.Document,
+            isValid: true,
+            validationErrors: [] as string[]
+        };
+
+        try {
+            // First try to parse without strict validation
+            const api = await SwaggerParser.parse(schemaData);
             
             // Ensure we have an OpenAPI 3.x document
             if (!api.openapi?.startsWith('3.')) {
                 throw new Error('Only OpenAPI 3.x specifications are supported');
             }
+
+            result.schema = api;
+
+            // Try strict validation, but if it fails, still return the parsed schema
+            try {
+                await SwaggerParser.validate(api);
+                console.log('✅ Schema passed strict validation');
+            } catch (validationError) {
+                const errorSummary = this.getValidationErrorSummary(validationError);
+                console.warn('⚠️ Schema has validation warnings but can still be used:', errorSummary);
+                result.isValid = false;
+                result.validationErrors.push(errorSummary);
+                // Continue with the parsed schema even if validation fails
+                // This allows us to work with schemas that have minor issues
+            }
             
-            return api;
+            return result;
             
         } catch (error) {
-            console.error('Schema validation failed:', error);
+            console.error('Schema parsing failed:', error);
+            
+            // If parsing completely fails, try to extract what we can
+            if (typeof schemaData === 'object' && schemaData.openapi) {
+                console.warn('⚠️ Using schema with limited parsing due to errors');
+                result.schema = schemaData as OpenAPIV3.Document;
+                result.isValid = false;
+                result.validationErrors.push(this.getErrorMessage(error));
+                return result;
+            }
+            
             throw error;
         }
+    }
+
+    /**
+     * Get a summary of validation errors for logging
+     * @param error The validation error
+     */
+    private getValidationErrorSummary(error: any): string {
+        if (error.details && Array.isArray(error.details)) {
+            const errorCount = error.details.length;
+            const firstFewErrors = error.details.slice(0, 3).map((detail: any) => {                const path = detail.path ? detail.path.join('.') : 'unknown';
+                return `${path}: ${detail.message ?? detail.code}`;
+            });
+            
+            let summary = `${errorCount} validation issue(s) found`;
+            if (firstFewErrors.length > 0) {
+                summary += `: ${firstFewErrors.join(', ')}`;
+                if (errorCount > 3) {
+                    summary += ` (and ${errorCount - 3} more)`;
+                }
+            }
+            return summary;
+        } else if (error.message) {
+            // Truncate very long error messages
+            const message = error.message.length > 200 ? 
+                error.message.substring(0, 200) + '...' : 
+                error.message;
+            return message;
+        }
+        return 'Unknown validation error';
     }
     
     /**
@@ -285,12 +342,11 @@ export class SchemaLoader {
                 }
             });
         }
-        
-        return {
-            title: schema.info?.title || 'Untitled API',
-            version: schema.info?.version || 'Unknown',
+          return {
+            title: schema.info?.title ?? 'Untitled API',
+            version: schema.info?.version ?? 'Unknown',
             description: schema.info?.description,
-            serverCount: schema.servers?.length || 0,
+            serverCount: schema.servers?.length ?? 0,
             pathCount,
             endpointCount
         };
