@@ -2,7 +2,7 @@
   "name": "pathfinder-openapi-explorer",
   "displayName": "Pathfinder - OpenAPI Explorer",
   "description": "Explore, test, and generate code for OpenAPI/REST APIs with intelligent platform detection",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "ASHURTECHNET",
   "icon": "pathfinder.png",
   "repository": {
@@ -145,6 +145,21 @@
         "title": "Toggle Authorization Visibility",
         "icon": "$(eye)",
         "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.exportEnvironmentsAndGroups",
+        "title": "Export Environments & Groups",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.importEnvironmentsAndGroups",
+        "title": "Import Environments & Groups",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.resetSession",
+        "title": "Reset Pathfinder Session",
+        "category": "Pathfinder"
       }
     ],
     "configuration": {
@@ -205,6 +220,16 @@
         {
           "command": "pathfinder.addEnvironment",
           "when": "view == pathfinderExplorer",
+          "group": "navigation"
+        },
+        {
+          "command": "pathfinder.exportEnvironmentsAndGroups",
+          "when": "view == pathfinderExplorer && !viewItem",
+          "group": "navigation"
+        },
+        {
+          "command": "pathfinder.importEnvironmentsAndGroups",
+          "when": "view == pathfinderExplorer && !viewItem",
           "group": "navigation"
         }
       ],

@@ -8,6 +8,10 @@
  */
 
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
+let yaml: any;
+try { yaml = require('yaml'); } catch {}
 import { ConfigurationManager } from './configuration';
 import { SchemaLoader } from './schema-loader';
 import { ApiTreeProvider } from './tree-provider';
@@ -162,6 +166,16 @@ function registerCommands(context: vscode.ExtensionContext) {
         (group: any) => showGroupDetailsHandler(group)
     );
     
+    const exportEnvironmentsAndGroupsCommand = vscode.commands.registerCommand(
+        'pathfinder.exportEnvironmentsAndGroups',
+        exportEnvironmentsAndGroupsHandler
+    );
+
+    const importEnvironmentsAndGroupsCommand = vscode.commands.registerCommand(
+        'pathfinder.importEnvironmentsAndGroups',
+        importEnvironmentsAndGroupsHandler
+    );
+    
     // ========================
     // Schema Loading Commands
     // ========================
@@ -189,6 +203,15 @@ function registerCommands(context: vscode.ExtensionContext) {
         'pathfinder.showStorageStats', 
         showStorageStatsHandler
     );
+
+    const resetSessionCommand = vscode.commands.registerCommand(
+        'pathfinder.resetSession',
+        async () => {
+            await configManager.clearAllData();
+            treeProvider.refresh();
+            vscode.window.showInformationMessage('Pathfinder session has been reset to defaults.');
+        }
+    );
     
     // Add all commands to the context so they get cleaned up when the extension deactivates
     context.subscriptions.push(
@@ -206,10 +229,13 @@ function registerCommands(context: vscode.ExtensionContext) {
         removeEnvironmentFromGroupCommand,
         generateMultiEnvironmentCodeCommand,
         showGroupDetailsCommand,
+        exportEnvironmentsAndGroupsCommand,
+        importEnvironmentsAndGroupsCommand,
         loadSchemaFromUrlCommand,
         loadSchemaFromFileCommand,
         showSchemaInfoCommand,
-        showStorageStatsCommand
+        showStorageStatsCommand,
+        resetSessionCommand
     );
 }
 
@@ -1084,6 +1110,90 @@ async function showGroupDetailsHandler(group: any) {
         
     } catch (error) {
         vscode.window.showErrorMessage(`Failed to show group details: ${error}`);
+    }
+}
+
+/**
+ * Command to export all environments and groups to JSON or YAML
+ */
+async function exportEnvironmentsAndGroupsHandler() {
+    try {
+        const environments = await configManager.getApiEnvironments();
+        const groups = await configManager.getEnvironmentGroups();
+        const data = { environments, groups };
+
+        const formats = [
+            { label: 'JSON', ext: 'json' },
+            { label: 'YAML', ext: 'yaml' }
+        ];
+        const format = await vscode.window.showQuickPick(formats, { placeHolder: 'Select export format' });
+        if (!format) {
+            return;
+        }
+
+        const uri = await vscode.window.showSaveDialog({
+            filters: { [format.label]: [format.ext] },
+            saveLabel: `Export as ${format.label}`
+        });
+        if (!uri) {
+            return;
+        }
+
+        let content = '';
+        if (format.ext === 'json') {
+            content = JSON.stringify(data, null, 2);
+        } else if (format.ext === 'yaml' && yaml) {
+            content = yaml.stringify(data);
+        } else {
+            vscode.window.showErrorMessage('YAML export requires the "yaml" npm package.');
+            return;
+        }
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
+        vscode.window.showInformationMessage(`Exported environments and groups to ${uri.fsPath}`);
+    } catch (error) {
+        vscode.window.showErrorMessage(`Export failed: ${error}`);
+    }
+}
+
+/**
+ * Command to import environments and groups from JSON or YAML
+ */
+async function importEnvironmentsAndGroupsHandler() {
+    try {
+        const uri = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            filters: { 'JSON or YAML': ['json', 'yaml', 'yml'] },
+            openLabel: 'Import'
+        });
+        if (!uri || uri.length === 0) {
+            return;
+        }
+        const fileUri = uri[0];
+        const content = Buffer.from(await vscode.workspace.fs.readFile(fileUri)).toString('utf8');
+        let data: any;
+        if (fileUri.fsPath.endsWith('.json')) {
+            data = JSON.parse(content);
+        } else if ((fileUri.fsPath.endsWith('.yaml') || fileUri.fsPath.endsWith('.yml')) && yaml) {
+            data = yaml.parse(content);
+        } else {
+            vscode.window.showErrorMessage('YAML import requires the "yaml" npm package.');
+            return;
+        }
+        if (!data || !Array.isArray(data.environments) || !Array.isArray(data.groups)) {
+            vscode.window.showErrorMessage('Invalid import file format.');
+            return;
+        }
+        // Merge or replace? For now, just add (could be improved)
+        for (const group of data.groups) {
+            await configManager.saveEnvironmentGroup(group);
+        }
+        for (const env of data.environments) {
+            await configManager.saveApiEnvironment(env);
+        }
+        treeProvider.refresh();
+        vscode.window.showInformationMessage('Imported environments and groups.');
+    } catch (error) {
+        vscode.window.showErrorMessage(`Import failed: ${error}`);
     }
 }
 
