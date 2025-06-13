@@ -160,6 +160,11 @@
         "command": "pathfinder.resetSession",
         "title": "Reset Pathfinder Session",
         "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.factoryReset",
+        "title": "Factory Reset (Remove All User Data)",
+        "category": "Pathfinder"
       }
     ],
     "configuration": {

@@ -212,6 +212,71 @@ function registerCommands(context: vscode.ExtensionContext) {
             vscode.window.showInformationMessage('Pathfinder session has been reset to defaults.');
         }
     );
+
+    const factoryResetCommand = vscode.commands.registerCommand(
+        'pathfinder.factoryReset',
+        async () => {
+            // Remove all user data: environments, groups, schemas, and settings
+            await configManager.clearAllData();
+
+            // Clear globalState and workspaceState
+            try {
+                await Promise.all([
+                    ...context.globalState.keys().map(k => context.globalState.update(k, undefined)),
+                    ...context.workspaceState.keys().map(k => context.workspaceState.update(k, undefined))
+                ]);
+            } catch (e) {
+                console.error('Failed to clear global/workspace state:', e);
+            }
+
+            // Delete all files in globalStorageUri and storageUri
+            async function deleteAllFilesInDir(uri: vscode.Uri) {
+                try {
+                    const entries = await vscode.workspace.fs.readDirectory(uri);
+                    for (const [name, type] of entries) {
+                        const entryUri = vscode.Uri.joinPath(uri, name);
+                        if (type === vscode.FileType.Directory) {
+                            await deleteAllFilesInDir(entryUri);
+                            await vscode.workspace.fs.delete(entryUri, { recursive: true, useTrash: false });
+                        } else {
+                            await vscode.workspace.fs.delete(entryUri, { useTrash: false });
+                        }
+                    }
+                } catch (e) {
+                    // Log and ignore if dir doesn't exist or can't be read
+                    console.warn(`Could not delete files in ${uri.fsPath}:`, e);
+                }
+            }
+            if (context.globalStorageUri) {
+                await deleteAllFilesInDir(context.globalStorageUri);
+            }
+            if (context.storageUri ?? false) {
+                await deleteAllFilesInDir(context.storageUri!);
+            }
+
+            // Reset all extension settings under 'pathfinder' (global and workspace)
+            const config = vscode.workspace.getConfiguration('pathfinder');
+            const settings = [
+                'requestTimeout',
+                'defaultCodeFormat',
+                'autoValidateSchemas',
+                'maxHistoryItems'
+            ];
+            for (const setting of settings) {
+                await config.update(setting, undefined, vscode.ConfigurationTarget.Global);
+                await config.update(setting, undefined, vscode.ConfigurationTarget.Workspace);
+            }
+
+            treeProvider.refresh();
+            const reload = await vscode.window.showInformationMessage(
+                'Pathfinder has been factory reset. All user data and settings have been removed. Reload window now?',
+                'Reload Window', 'Later'
+            );
+            if (reload === 'Reload Window') {
+                await vscode.commands.executeCommand('workbench.action.reloadWindow');
+            }
+        }
+    );
     
     // Add all commands to the context so they get cleaned up when the extension deactivates
     context.subscriptions.push(
@@ -235,7 +300,8 @@ function registerCommands(context: vscode.ExtensionContext) {
         loadSchemaFromFileCommand,
         showSchemaInfoCommand,
         showStorageStatsCommand,
-        resetSessionCommand
+        resetSessionCommand,
+        factoryResetCommand
     );
 }
 
