@@ -95,7 +95,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     const addEnvironmentCommand = vscode.commands.registerCommand(
         'pathfinder.addEnvironment', 
-        addApiEnvironmentHandler
+        () => addApiEnvironmentHandler(context)
     );
     
     const listEnvironmentsCommand = vscode.commands.registerCommand(
@@ -370,7 +370,7 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
     
     const runHttpRequestCmd = vscode.commands.registerCommand(
         'pathfinder.runHttpRequest',
-        runHttpRequestCommand
+        (endpoint: any, schemaItem: any) => runHttpRequestCommand(endpoint, schemaItem, context)
     );
     
     const executeHttpRequestCmd = vscode.commands.registerCommand(
@@ -419,7 +419,7 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
  * Command to add a new API environment
  * This walks the user through setting up a new environment with authentication
  */
-async function addApiEnvironmentHandler() {
+async function addApiEnvironmentHandler(context: vscode.ExtensionContext) {
     try {
         console.log('Adding new API environment...');
         
@@ -474,7 +474,8 @@ async function addApiEnvironmentHandler() {
             createdAt: new Date()
         };
         
-        // Handle authentication details based on type
+        // Secure storage for secrets
+        const secretPrefix = `env:${environment.id}`;
         if (authType.value === 'apikey') {
             const apiKey = await vscode.window.showInputBox({
                 prompt: 'Enter your API key',
@@ -505,7 +506,9 @@ async function addApiEnvironmentHandler() {
                 return;
             }
             
-            environment.auth.apiKey = apiKey;
+            // Store API key in SecretStorage
+            await context.secrets.store(`${secretPrefix}:apiKey`, apiKey);
+            (environment.auth as any)["apiKeySecret"] = `${secretPrefix}:apiKey`;
             environment.auth.apiKeyLocation = location.value as 'header' | 'query';
             environment.auth.apiKeyName = keyName;
             
@@ -519,7 +522,9 @@ async function addApiEnvironmentHandler() {
                 return;
             }
             
-            environment.auth.bearerToken = token;
+            // Store bearer token in SecretStorage
+            await context.secrets.store(`${secretPrefix}:bearerToken`, token);
+            (environment.auth as any)["bearerTokenSecret"] = `${secretPrefix}:bearerToken`;
             
         } else if (authType.value === 'basic') {
             const username = await vscode.window.showInputBox({
@@ -540,10 +545,11 @@ async function addApiEnvironmentHandler() {
             }
             
             environment.auth.username = username;
-            environment.auth.password = password;
+            await context.secrets.store(`${secretPrefix}:password`, password);
+            (environment.auth as any)["passwordSecret"] = `${secretPrefix}:password`;
         }
         
-        // Save the environment
+        // Save the environment (without secrets)
         await configManager.saveApiEnvironment(environment);
         
         // Refresh tree view to show new environment
@@ -606,36 +612,34 @@ async function listApiEnvironmentsHandler() {
 async function deleteApiEnvironmentHandler() {
     try {
         const environments = await configManager.getApiEnvironments();
-        
-        if (environments.length === 0) {
+        if (!environments || environments.length === 0) {
             vscode.window.showInformationMessage('No API environments to delete.');
             return;
         }
-        
         const items = environments.map(env => ({
             label: env.name,
             description: env.baseUrl,
             environment: env
         }));
-        
         const selected = await vscode.window.showQuickPick(items, {
             placeHolder: 'Select an environment to delete'
         });
-        
-        if (selected) {
-            // Use session-based confirmation dialog
-            const confirmed = await confirmDeleteAction(
-                `Are you sure you want to delete "${selected.environment.name}"?`
-            );
-            if (confirmed) {
-                await configManager.deleteApiEnvironment(selected.environment.id);
-                treeProvider.refresh();
-                vscode.window.showInformationMessage(`Environment "${selected.environment.name}" has been deleted.`);
-            }
+        if (!selected?.environment) {
+            vscode.window.showInformationMessage('No environment selected for deletion.');
+            return;
+        }
+        // Use session-based confirmation dialog
+        const confirmed = await confirmDeleteAction(
+            `Are you sure you want to delete "${selected.environment.name ?? 'Unknown'}"?`
+        );
+        if (confirmed) {
+            await configManager.deleteApiEnvironment(selected.environment.id);
+            treeProvider.refresh();
+            vscode.window.showInformationMessage(`Environment "${selected.environment.name ?? 'Unknown'}" has been deleted.`);
         }
     } catch (error) {
         console.error('Failed to delete environment:', error);
-        vscode.window.showErrorMessage(`Failed to delete environment: ${error}`);
+        vscode.window.showErrorMessage(`Failed to delete environment: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -1009,17 +1013,21 @@ async function editGroupHandler(group: any) {
  */
 async function deleteGroupHandler(group: any) {
     try {
+        if (!group?.id) {
+            vscode.window.showErrorMessage('No group selected for deletion.');
+            return;
+        }
         // Use session-based confirmation dialog
         const confirmed = await confirmDeleteAction(
-            `Delete group "${group.name}"? Environments will be moved out of the group.`
+            `Delete group "${group.name ?? 'Unknown'}"? Environments will be moved out of the group.`
         );
         if (confirmed) {
             await configManager.deleteEnvironmentGroup(group.id);
             treeProvider.refresh();
-            vscode.window.showInformationMessage(`Group "${group.name}" deleted.`);
+            vscode.window.showInformationMessage(`Group "${group.name ?? 'Unknown'}" deleted.`);
         }
     } catch (error) {
-        vscode.window.showErrorMessage(`Failed to delete group: ${error}`);
+        vscode.window.showErrorMessage(`Failed to delete group: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
 
@@ -1184,10 +1192,21 @@ async function showGroupDetailsHandler(group: any) {
  */
 async function exportEnvironmentsAndGroupsHandler() {
     try {
+        // Get environments and groups
         const environments = await configManager.getApiEnvironments();
         const groups = await configManager.getEnvironmentGroups();
-        const data = { environments, groups };
-
+        // Remove secret references from environments before export
+        const sanitizedEnvironments = environments.map(env => {
+            const sanitized = { ...env, auth: { ...env.auth } };
+            // @ts-expect-error: dynamic property
+            delete sanitized.auth["apiKeySecret"];
+            // @ts-expect-error: dynamic property
+            delete sanitized.auth["bearerTokenSecret"];
+            // @ts-expect-error: dynamic property
+            delete sanitized.auth["passwordSecret"];
+            return sanitized;
+        });
+        const data = { environments: sanitizedEnvironments, groups };
         const formats = [
             { label: 'JSON', ext: 'json' },
             { label: 'YAML', ext: 'yaml' }
@@ -1196,7 +1215,6 @@ async function exportEnvironmentsAndGroupsHandler() {
         if (!format) {
             return;
         }
-
         const uri = await vscode.window.showSaveDialog({
             filters: { [format.label]: [format.ext] },
             saveLabel: `Export as ${format.label}`
@@ -1204,7 +1222,6 @@ async function exportEnvironmentsAndGroupsHandler() {
         if (!uri) {
             return;
         }
-
         let content = '';
         if (format.ext === 'json') {
             content = JSON.stringify(data, null, 2);
@@ -1242,31 +1259,91 @@ async function importEnvironmentsAndGroupsHandler() {
         } else if ((fileUri.fsPath.endsWith('.yaml') || fileUri.fsPath.endsWith('.yml')) && yaml) {
             data = yaml.parse(content);
         } else {
-            vscode.window.showErrorMessage('YAML import requires the "yaml" npm package.');
+            vscode.window.showErrorMessage('Unsupported file format.');
             return;
         }
         if (!data || !Array.isArray(data.environments) || !Array.isArray(data.groups)) {
             vscode.window.showErrorMessage('Invalid import file format.');
             return;
         }
-        // Merge or replace? For now, just add (could be improved)
+        // Only import non-secret metadata
         for (const group of data.groups) {
             await configManager.saveEnvironmentGroup(group);
         }
         for (const env of data.environments) {
-            await configManager.saveApiEnvironment(env);
+            const sanitized = { ...env, auth: { ...env.auth } };
+            // @ts-expect-error: dynamic property
+            delete sanitized.auth["apiKeySecret"];
+            // @ts-expect-error: dynamic property
+            delete sanitized.auth["bearerTokenSecret"];
+            // @ts-expect-error: dynamic property
+            delete sanitized.auth["passwordSecret"];
+            await configManager.saveApiEnvironment(sanitized);
         }
         treeProvider.refresh();
-        vscode.window.showInformationMessage('Imported environments and groups.');
+        vscode.window.showInformationMessage('Imported environments and groups. (Secrets must be re-entered manually)');
     } catch (error) {
         vscode.window.showErrorMessage(`Import failed: ${error}`);
     }
 }
 
 /**
+ * Ensure all required secrets for an environment are present in SecretStorage.
+ * If missing, prompt the user and store them securely.
+ */
+async function ensureEnvironmentSecrets(context: vscode.ExtensionContext, environment: any) {
+    const auth = environment.auth ?? {};
+    // API Key
+    if (auth.type === 'apikey' && auth.apiKeySecret) {
+        const existing = await context.secrets.get(auth.apiKeySecret);
+        if (!existing) {
+            const apiKey = await vscode.window.showInputBox({
+                prompt: `Enter API key for environment "${environment.name}"`,
+                password: true
+            });
+            if (apiKey) {
+                await context.secrets.store(auth.apiKeySecret, apiKey);
+            } else {
+                throw new Error('API key is required for this environment.');
+            }
+        }
+    }
+    // Bearer Token
+    if (auth.type === 'bearer' && auth.bearerTokenSecret) {
+        const existing = await context.secrets.get(auth.bearerTokenSecret);
+        if (!existing) {
+            const token = await vscode.window.showInputBox({
+                prompt: `Enter bearer token for environment "${environment.name}"`,
+                password: true
+            });
+            if (token) {
+                await context.secrets.store(auth.bearerTokenSecret, token);
+            } else {
+                throw new Error('Bearer token is required for this environment.');
+            }
+        }
+    }
+    // Basic Auth Password
+    if (auth.type === 'basic' && auth.passwordSecret) {
+        const existing = await context.secrets.get(auth.passwordSecret);
+        if (!existing) {
+            const password = await vscode.window.showInputBox({
+                prompt: `Enter password for environment "${environment.name}"`,
+                password: true
+            });
+            if (password) {
+                await context.secrets.store(auth.passwordSecret, password);
+            } else {
+                throw new Error('Password is required for this environment.');
+            }
+        }
+    }
+}
+
+/**
  * Command to run HTTP request from endpoint
  */
-async function runHttpRequestCommand(endpoint: any, schemaItem: any) {
+async function runHttpRequestCommand(endpoint: any, schemaItem: any, context: vscode.ExtensionContext) {
     try {
         // Get the environment from the schema
         const environment = await configManager.getApiEnvironment(schemaItem.environment.id);
@@ -1274,6 +1351,9 @@ async function runHttpRequestCommand(endpoint: any, schemaItem: any) {
             vscode.window.showErrorMessage('Environment not found');
             return;
         }
+
+        // Ensure secrets are present
+        await ensureEnvironmentSecrets(context, environment);
 
         // Create EndpointInfo from the endpoint data
         const endpointInfo: EndpointInfo = {
