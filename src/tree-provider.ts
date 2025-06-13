@@ -443,12 +443,22 @@ class EnvironmentGroupTreeItem extends TreeItem {
         // Enable drag and drop
         this.contextValue = 'environmentGroup';
         
+        // Add resourceUri for context menu command argument resolution
+        this.resourceUri = vscode.Uri.parse(`pathfinder://group/${group.id}`);
+        
         // Command to run when clicked
         this.command = {
             command: 'pathfinder.showGroupDetails',
             title: 'Show Group Details',
             arguments: [group]
         };
+    }
+
+    // Helper to extract groupId from resourceUri
+    static getGroupIdFromResourceUri(uri: vscode.Uri): string | undefined {
+        const regex = /\/group\/([^/]+)/;
+        const match = regex.exec(uri.path);
+        return match ? match[1] : undefined;
     }
 }
 
