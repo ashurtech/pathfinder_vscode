@@ -175,12 +175,10 @@ export class HttpRequestRunner {
         });
         
         return result;
-    }
-
-    /**
+    }    /**
      * Generate HTTP request skeleton from OpenAPI endpoint
      */
-    generateRequestSkeleton(endpoint: EndpointInfo, environment: ApiEnvironment): string {
+    generateRequestSkeleton(endpoint: EndpointInfo, environment: ApiEnvironment, platformConfig?: any): string {
         const baseUrl = environment.baseUrl.replace(/\/$/, '');
         const path = endpoint.path;
         const method = endpoint.method.toUpperCase();
@@ -194,6 +192,13 @@ export class HttpRequestRunner {
             'Content-Type: application/json',
             'Accept: application/json'
         ];
+        
+        // Add platform-specific required headers (like kbn-xsrf for Kibana)
+        if (platformConfig?.requiredHeaders) {
+            for (const [headerName, headerValue] of Object.entries(platformConfig.requiredHeaders)) {
+                headers.push(`${headerName}: ${headerValue}`);
+            }
+        }
         
         // Add authentication headers based on environment (with security masking)
         if (environment.auth.type === 'bearer' && environment.auth.bearerToken) {
@@ -496,14 +501,12 @@ ${Object.entries(response.headers)
 ${formattedBody}
 \`\`\`
 `;
-    }
-
-    /**
+    }    /**
      * Open HTTP request editor
      */
-    async openRequestEditor(endpoint: EndpointInfo, environment: ApiEnvironment): Promise<void> {
+    async openRequestEditor(endpoint: EndpointInfo, environment: ApiEnvironment, platformConfig?: any): Promise<void> {
         try {
-            const skeleton = this.generateRequestSkeleton(endpoint, environment);
+            const skeleton = this.generateRequestSkeleton(endpoint, environment, platformConfig);
             
             // Create new untitled document
             const document = await vscode.workspace.openTextDocument({

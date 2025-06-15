@@ -8,8 +8,6 @@
  */
 
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
 let yaml: any;
 try { yaml = require('yaml'); } catch {}
 import { ConfigurationManager } from './configuration';
@@ -715,10 +713,16 @@ async function loadSchemaFromUrlHandler(environment?: ApiEnvironment) {
             
             if (loadedSchema.isValid) {
                 const info = schemaLoader.getSchemaInfo(loadedSchema.schema);
+                const platformInfo = loadedSchema.platformConfig?.platform ? 
+                    ` | Platform: ${loadedSchema.platformConfig.platform}` : '';
+                const headerInfo = loadedSchema.platformConfig?.requiredHeaders && 
+                    Object.keys(loadedSchema.platformConfig.requiredHeaders).length > 0 ?
+                    ` | Auto-headers: ${Object.keys(loadedSchema.platformConfig.requiredHeaders).join(', ')}` : '';
+                
                 vscode.window.showInformationMessage(
                     `✅ Schema loaded successfully!\n` +
                     `API: ${info.title} v${info.version}\n` +
-                    `Endpoints: ${info.endpointCount}`
+                    `Endpoints: ${info.endpointCount}${platformInfo}${headerInfo}`
                 );
             } else {
                 // Schema loaded but has validation issues - show as warning, not error
@@ -814,10 +818,16 @@ async function loadSchemaFromFileHandler(environment?: ApiEnvironment) {
             
             if (loadedSchema.isValid) {
                 const info = schemaLoader.getSchemaInfo(loadedSchema.schema);
+                const platformInfo = loadedSchema.platformConfig?.platform ? 
+                    ` | Platform: ${loadedSchema.platformConfig.platform}` : '';
+                const headerInfo = loadedSchema.platformConfig?.requiredHeaders && 
+                    Object.keys(loadedSchema.platformConfig.requiredHeaders).length > 0 ?
+                    ` | Auto-headers: ${Object.keys(loadedSchema.platformConfig.requiredHeaders).join(', ')}` : '';
+                
                 vscode.window.showInformationMessage(
                     `✅ Schema loaded successfully!\n` +
                     `API: ${info.title} v${info.version}\n` +
-                    `Endpoints: ${info.endpointCount}`
+                    `Endpoints: ${info.endpointCount}${platformInfo}${headerInfo}`
                 );
             } else {
                 // Schema loaded but has validation issues - show as warning, not error
@@ -1355,6 +1365,10 @@ async function runHttpRequestCommand(endpoint: any, schemaItem: any, context: vs
         // Ensure secrets are present
         await ensureEnvironmentSecrets(context, environment);
 
+        // Get the schema's platform configuration if available
+        const schemas = await configManager.getLoadedSchemas(environment.id);
+        const platformConfig = schemas.length > 0 ? schemas[0].platformConfig : undefined;
+
         // Create EndpointInfo from the endpoint data
         const endpointInfo: EndpointInfo = {
             path: endpoint.path,
@@ -1365,8 +1379,8 @@ async function runHttpRequestCommand(endpoint: any, schemaItem: any, context: vs
             tags: endpoint.tags ?? []
         };
 
-        // Open HTTP request editor
-        await httpRunner.openRequestEditor(endpointInfo, environment);
+        // Open HTTP request editor with platform configuration
+        await httpRunner.openRequestEditor(endpointInfo, environment, platformConfig);
         
     } catch (error) {
         vscode.window.showErrorMessage(`Failed to open HTTP request: ${error}`);

@@ -102,9 +102,12 @@ export class SchemaLoader {
                     ...headers,
                     'Accept': 'application/json, application/yaml, text/yaml'
                 }
-            });
-              // Parse and validate the schema using swagger-parser
+            });            // Parse and validate the schema using swagger-parser
             const result = await this.parseAndValidateSchema(response.data);
+            
+            // Detect platform from schema and generate platform config
+            const detectedPlatform = this.detectPlatformFromSchema(result.schema);
+            const platformConfig = this.generatePlatformConfig(detectedPlatform);
             
             return {
                 environmentId: environment.id,
@@ -112,7 +115,8 @@ export class SchemaLoader {
                 source: url,
                 loadedAt: new Date(),
                 isValid: result.isValid,
-                validationErrors: result.validationErrors
+                validationErrors: result.validationErrors,
+                platformConfig: platformConfig
             };
             
         } catch (error) {
@@ -152,9 +156,12 @@ export class SchemaLoader {
             } catch {
                 // If JSON parsing fails, swagger-parser will handle YAML
                 schemaData = contentString;
-            }
-              // Parse and validate the schema
+            }            // Parse and validate the schema
             const result = await this.parseAndValidateSchema(schemaData);
+            
+            // Detect platform from schema and generate platform config
+            const detectedPlatform = this.detectPlatformFromSchema(result.schema);
+            const platformConfig = this.generatePlatformConfig(detectedPlatform);
             
             return {
                 environmentId: environment.id,
@@ -162,7 +169,8 @@ export class SchemaLoader {
                 source: filePath,
                 loadedAt: new Date(),
                 isValid: result.isValid,
-                validationErrors: result.validationErrors
+                validationErrors: result.validationErrors,
+                platformConfig: platformConfig
             };
             
         } catch (error) {
@@ -258,6 +266,103 @@ export class SchemaLoader {
             }
             
             throw error;
+        }
+    }    /**
+     * Detect platform type from OpenAPI schema info
+     * Analyzes schema title, description, and servers to identify known platforms
+     */
+    private detectPlatformFromSchema(schema: OpenAPIV3.Document): string {
+        // Extract schema info safely
+        const info = schema?.info ?? {};
+        const title = (info.title ?? '').toLowerCase();
+        const description = (info.description ?? '').toLowerCase();
+        const servers = schema?.servers ?? [];
+        
+        // Check for Kibana indicators
+        const kibanaIndicators = ['kibana'];
+        if (kibanaIndicators.some(indicator => 
+            title.includes(indicator) || 
+            description.includes(indicator) ||
+            servers.some((server: any) => (server.url ?? '').toLowerCase().includes(indicator))
+        )) {
+            console.log('🔍 Detected Kibana API from schema analysis');
+            return 'kibana';
+        }
+        
+        // Check for Elasticsearch indicators
+        const elasticsearchIndicators = ['elasticsearch'];
+        if (elasticsearchIndicators.some(indicator => 
+            title.includes(indicator) || 
+            description.includes(indicator) ||
+            servers.some((server: any) => (server.url ?? '').toLowerCase().includes(indicator))
+        )) {
+            console.log('🔍 Detected Elasticsearch API from schema analysis');
+            return 'elasticsearch';
+        }
+        
+        // Default to generic
+        console.log('🔍 Schema analysis: using generic platform configuration');
+        return 'generic';
+    }
+
+    /**
+     * Generate platform-specific request configuration based on detected platform
+     */
+    private generatePlatformConfig(platform: string): any {
+        switch (platform) {
+            case 'kibana':
+                return {
+                    platform: 'kibana',
+                    requiredHeaders: {
+                        'kbn-xsrf': 'true'
+                    },
+                    authConfig: {
+                        headerFormat: 'Bearer'
+                    },
+                    sslConfig: {
+                        allowSelfSigned: true,
+                        notes: 'Kibana often uses self-signed certificates in development'
+                    },
+                    codeGenHints: {
+                        comments: [
+                            'Kibana requires kbn-xsrf header for API requests',
+                            'This prevents CSRF attacks'
+                        ],
+                        errorHandling: 'Check for Kibana-specific error responses'
+                    }
+                };
+            case 'elasticsearch':
+                return {
+                    platform: 'elasticsearch',
+                    requiredHeaders: {},
+                    authConfig: {
+                        headerFormat: 'Bearer'
+                    },
+                    sslConfig: {
+                        allowSelfSigned: true,
+                        notes: 'Elasticsearch often uses self-signed certificates'
+                    },
+                    codeGenHints: {
+                        comments: [
+                            'Elasticsearch API endpoint',
+                            'Supports various authentication methods'
+                        ]
+                    }
+                };
+            default:
+                return {
+                    platform: 'generic',
+                    requiredHeaders: {},
+                    authConfig: {
+                        headerFormat: 'Bearer'
+                    },
+                    sslConfig: {
+                        allowSelfSigned: false
+                    },
+                    codeGenHints: {
+                        comments: ['Generic API endpoint']
+                    }
+                };
         }
     }
 
