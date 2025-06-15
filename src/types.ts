@@ -338,3 +338,171 @@ export const PLATFORM_CONFIGS: Record<string, RequestGeneratorConfig> = {
         platform: 'generic'
     }
 };
+
+/**
+ * NEW: Schema-first data model interfaces for architectural refactor
+ */
+
+/**
+ * Top-level schema entity in the new schema-first architecture
+ * Schemas are now the primary organizational unit, with environments as children
+ */
+export interface ApiSchema {
+    /** Unique identifier for this schema */
+    id: string;
+    
+    /** Human-readable name (e.g., "Kibana API v8.0") */
+    name: string;
+    
+    /** Optional description */
+    description?: string;
+    
+    /** The actual OpenAPI specification document */
+    schema: OpenAPIV3.Document;
+    
+    /** Where we loaded this schema from */
+    source: string;
+    
+    /** When we loaded this schema */
+    loadedAt: Date;
+    
+    /** When this schema was last updated */
+    lastUpdated: Date;
+    
+    /** Whether the schema passed validation */
+    isValid: boolean;
+    
+    /** Any validation errors we found */
+    validationErrors?: string[];
+    
+    /** Platform-specific configurations (inherited by environments) */
+    platformConfig?: RequestGeneratorConfig;
+    
+    /** Base configuration that environments can inherit */
+    baseConfig?: {
+        /** Default headers to include */
+        defaultHeaders?: Record<string, string>;
+        
+        /** Default authentication type */
+        defaultAuthType?: 'none' | 'apikey' | 'bearer' | 'basic';
+        
+        /** Default timeout */
+        defaultTimeout?: number;
+    };
+    
+    /** Version/tag from the OpenAPI spec */
+    version: string;
+    
+    /** Color/icon theme for visual distinction */
+    color?: 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow';
+    
+    /** Optional group membership */
+    groupId?: string;
+}
+
+/**
+ * Environment entity that references a schema and provides environment-specific overrides
+ * Environments are now children of schemas, not standalone entities
+ */
+export interface SchemaEnvironment {
+    /** Unique identifier for this environment */
+    id: string;
+    
+    /** Which schema this environment uses */
+    schemaId: string;
+    
+    /** Human-readable name (e.g., "Dev", "Test", "Production") */
+    name: string;
+    
+    /** Base URL for this environment */
+    baseUrl: string;
+    
+    /** Authentication configuration (can override schema defaults) */
+    auth: ApiAuthentication;
+    
+    /** Optional description */
+    description?: string;
+    
+    /** Environment-specific headers (merged with schema defaults) */
+    customHeaders?: Record<string, string>;
+    
+    /** Environment-specific timeout (overrides schema default) */
+    timeout?: number;
+    
+    /** When this environment was created */
+    createdAt: Date;
+    
+    /** When this environment was last used */
+    lastUsed?: Date;
+    
+    /** Environment type for visual grouping */
+    type?: 'development' | 'testing' | 'staging' | 'production' | 'other';
+}
+
+/**
+ * Schema groups for organizing multiple schemas
+ * Groups now organize schemas instead of environments
+ */
+export interface ApiSchemaGroup {
+    /** Unique identifier for this group */
+    id: string;
+    
+    /** Human-readable name */
+    name: string;
+    
+    /** Optional description */
+    description?: string;
+    
+    /** When this group was created */
+    createdAt: Date;
+    
+    /** Color/icon theme for visual distinction */
+    color?: 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow';
+}
+
+/**
+ * Configuration resolver that combines schema and environment settings at runtime
+ * This provides the final resolved configuration for making API requests
+ */
+export interface ResolvedEnvironmentConfig {
+    /** The environment details */
+    environment: SchemaEnvironment;
+    
+    /** The schema this environment uses */
+    schema: ApiSchema;
+    
+    /** Resolved headers (schema defaults + platform headers + environment overrides) */
+    resolvedHeaders: Record<string, string>;
+    
+    /** Resolved authentication */
+    resolvedAuth: ApiAuthentication;
+    
+    /** Resolved timeout */
+    resolvedTimeout: number;
+    
+    /** Platform configuration from schema */
+    platformConfig?: RequestGeneratorConfig;
+}
+
+/**
+ * Migration utilities type for handling data migration
+ */
+export interface MigrationResult {
+    /** Whether migration was successful */
+    success: boolean;
+    
+    /** Number of environments migrated */
+    environmentsMigrated: number;
+    
+    /** Number of schemas created */
+    schemasCreated: number;
+    
+    /** Number of groups migrated */
+    groupsMigrated: number;
+    
+    /** Any errors encountered during migration */
+    errors: string[];
+    
+    /** Backup location of old data */
+    backupLocation?: string;
+}

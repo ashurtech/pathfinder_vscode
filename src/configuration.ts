@@ -10,7 +10,7 @@
  */
 
 import * as vscode from 'vscode';
-import { ApiEnvironment, ApiEnvironmentGroup, ExtensionSettings, LoadedSchema } from './types';
+import { ApiEnvironment, ApiEnvironmentGroup, ExtensionSettings, LoadedSchema, ApiSchema, SchemaEnvironment, ApiSchemaGroup, ResolvedEnvironmentConfig } from './types';
 
 /**
  * Manages configuration and storage for the API Helper extension
@@ -259,6 +259,281 @@ export class ConfigurationManager {
         
         await this.context.globalState.update('loadedSchemas', filteredSchemas);
         console.log(`Saved schema for environment: ${schema.environmentId}`);
+    }
+    
+    // ========================
+    // Schema-First Architecture Support (NEW)
+    // ========================
+    
+    /**
+     * Get all API schemas in the new schema-first architecture
+     */
+    async getApiSchemas(): Promise<ApiSchema[]> {
+        const schemas = this.context.globalState.get<ApiSchema[]>('apiSchemas', []);
+        return schemas.map(schema => ({
+            ...schema,
+            loadedAt: new Date(schema.loadedAt),
+            lastUpdated: new Date(schema.lastUpdated)
+        }));
+    }
+    
+    /**
+     * Save an API schema in the new architecture
+     */
+    async saveApiSchema(schema: ApiSchema): Promise<void> {
+        const schemas = await this.getApiSchemas();
+        const existingIndex = schemas.findIndex(s => s.id === schema.id);
+        
+        if (existingIndex >= 0) {
+            schemas[existingIndex] = { ...schema, lastUpdated: new Date() };
+        } else {
+            schemas.push(schema);
+        }
+        
+        await this.context.globalState.update('apiSchemas', schemas);
+        console.log(`Saved API schema: ${schema.name}`);
+    }
+    
+    /**
+     * Delete an API schema and all its environments
+     */
+    async deleteApiSchema(schemaId: string): Promise<boolean> {
+        const schemas = await this.getApiSchemas();
+        const filteredSchemas = schemas.filter(s => s.id !== schemaId);
+        
+        if (filteredSchemas.length === schemas.length) {
+            return false; // Nothing was deleted
+        }
+        
+        // Also delete all environments that use this schema
+        const environments = await this.getSchemaEnvironments();
+        const filteredEnvironments = environments.filter(env => env.schemaId !== schemaId);
+        await this.context.globalState.update('schemaEnvironments', filteredEnvironments);
+        
+        await this.context.globalState.update('apiSchemas', filteredSchemas);
+        console.log(`Deleted API schema: ${schemaId}`);
+        return true;
+    }
+    
+    /**
+     * Get schema environments for a specific schema or all environments
+     */
+    async getSchemaEnvironments(schemaId?: string): Promise<SchemaEnvironment[]> {
+        const environments = this.context.globalState.get<SchemaEnvironment[]>('schemaEnvironments', []);
+        const converted = environments.map(env => ({
+            ...env,
+            createdAt: new Date(env.createdAt),
+            lastUsed: env.lastUsed ? new Date(env.lastUsed) : undefined
+        }));
+        
+        if (schemaId) {
+            return converted.filter(env => env.schemaId === schemaId);
+        }
+        
+        return converted;
+    }
+    
+    /**
+     * Save a schema environment
+     */
+    async saveSchemaEnvironment(environment: SchemaEnvironment): Promise<void> {
+        const environments = await this.getSchemaEnvironments();
+        const existingIndex = environments.findIndex(env => env.id === environment.id);
+        
+        if (existingIndex >= 0) {
+            environments[existingIndex] = environment;
+        } else {
+            environments.push(environment);
+        }
+        
+        await this.context.globalState.update('schemaEnvironments', environments);
+        console.log(`Saved schema environment: ${environment.name}`);
+    }
+    
+    /**
+     * Delete a schema environment
+     */
+    async deleteSchemaEnvironment(environmentId: string): Promise<boolean> {
+        const environments = await this.getSchemaEnvironments();
+        const filteredEnvironments = environments.filter(env => env.id !== environmentId);
+        
+        if (filteredEnvironments.length === environments.length) {
+            return false; // Nothing was deleted
+        }
+        
+        await this.context.globalState.update('schemaEnvironments', filteredEnvironments);
+        console.log(`Deleted schema environment: ${environmentId}`);
+        return true;
+    }
+    
+    /**
+     * Get API schema groups
+     */
+    async getApiSchemaGroups(): Promise<ApiSchemaGroup[]> {
+        const groups = this.context.globalState.get<ApiSchemaGroup[]>('apiSchemaGroups', []);
+        return groups.map(group => ({
+            ...group,
+            createdAt: new Date(group.createdAt)
+        }));
+    }
+    
+    /**
+     * Save an API schema group
+     */
+    async saveApiSchemaGroup(group: ApiSchemaGroup): Promise<void> {
+        const groups = await this.getApiSchemaGroups();
+        const existingIndex = groups.findIndex(g => g.id === group.id);
+        
+        if (existingIndex >= 0) {
+            groups[existingIndex] = group;
+        } else {
+            groups.push(group);
+        }
+        
+        await this.context.globalState.update('apiSchemaGroups', groups);
+        console.log(`Saved API schema group: ${group.name}`);
+    }
+      /**
+     * Get schemas that belong to a specific group
+     */
+    async getApiSchemasByGroup(groupId: string): Promise<ApiSchema[]> {
+        const schemas = await this.getApiSchemas();
+        return schemas.filter(schema => schema.groupId === groupId);
+    }
+    
+    /**
+     * Get schemas that belong to a specific group
+     */
+    async getSchemasInGroup(groupId: string): Promise<ApiSchema[]> {
+        const schemas = await this.getApiSchemas();
+        return schemas.filter(schema => schema.groupId === groupId);
+    }
+    
+    /**
+     * Get schemas that don't belong to any group
+     */
+    async getUngroupedSchemas(): Promise<ApiSchema[]> {
+        const schemas = await this.getApiSchemas();
+        return schemas.filter(schema => !schema.groupId);
+    }
+    
+    /**
+     * Resolve environment configuration with schema inheritance
+     * This combines schema defaults with environment-specific overrides
+     */
+    async resolveEnvironmentConfig(environmentId: string): Promise<ResolvedEnvironmentConfig | undefined> {
+        const environments = await this.getSchemaEnvironments();
+        const environment = environments.find(env => env.id === environmentId);
+        
+        if (!environment) {
+            return undefined;
+        }
+        
+        const schemas = await this.getApiSchemas();
+        const schema = schemas.find(s => s.id === environment.schemaId);
+        
+        if (!schema) {
+            throw new Error(`Schema not found for environment: ${environment.name}`);
+        }
+        
+        // Merge configurations in order of precedence:
+        // 1. Schema base defaults (lowest priority)
+        // 2. Schema platform headers
+        // 3. Environment custom headers (highest priority)
+        const resolvedHeaders = {
+            ...(schema.baseConfig?.defaultHeaders || {}),
+            ...(schema.platformConfig?.requiredHeaders || {}),
+            ...(environment.customHeaders || {})
+        };
+          return {
+            environment,
+            schema,
+            resolvedHeaders,
+            resolvedAuth: environment.auth,
+            resolvedTimeout: environment.timeout ?? schema.baseConfig?.defaultTimeout ?? 30000,
+            platformConfig: schema.platformConfig
+        };
+    }
+    
+    /**
+     * Get a specific API schema by ID
+     */
+    async getApiSchema(schemaId: string): Promise<ApiSchema | undefined> {
+        const schemas = await this.getApiSchemas();
+        return schemas.find(schema => schema.id === schemaId);
+    }
+    
+    /**
+     * Get a specific schema environment by ID
+     */
+    async getSchemaEnvironment(environmentId: string): Promise<SchemaEnvironment | undefined> {
+        const environments = await this.getSchemaEnvironments();
+        return environments.find(env => env.id === environmentId);
+    }
+    
+    /**
+     * Update the "last used" timestamp for a schema environment
+     */
+    async updateSchemaEnvironmentLastUsed(environmentId: string): Promise<void> {
+        const environment = await this.getSchemaEnvironment(environmentId);
+        if (environment) {
+            environment.lastUsed = new Date();
+            await this.saveSchemaEnvironment(environment);
+        }
+    }
+    
+    // ========================
+    // Migration Support
+    // ========================
+    
+    /**
+     * Check if migration to schema-first architecture is complete
+     */
+    async isMigrationComplete(): Promise<boolean> {
+        return this.context.globalState.get('schemaFirstMigrationComplete', false);
+    }
+      /**
+     * Mark migration as complete
+     */
+    async setMigrationComplete(): Promise<void> {
+        await this.context.globalState.update('schemaFirstMigrationComplete', true);
+    }
+
+    // ========================
+    // Migration Helper Methods
+    // ========================
+    
+    /**
+     * Store backup data for migration
+     */
+    async storeBackupData(backupKey: string, data: any): Promise<void> {
+        await this.context.globalState.update(backupKey, data);
+    }
+    
+    /**
+     * Retrieve backup data for migration
+     */
+    async getBackupData(backupKey: string): Promise<any> {
+        return this.context.globalState.get(backupKey);
+    }
+    
+    /**
+     * Store new schema-first data during migration
+     */
+    async storeSchemaFirstData(schemas: ApiSchema[], environments: SchemaEnvironment[], groups: ApiSchemaGroup[]): Promise<void> {
+        await this.context.globalState.update('apiSchemas', schemas);
+        await this.context.globalState.update('schemaEnvironments', environments);
+        await this.context.globalState.update('apiSchemaGroups', groups);
+    }
+    
+    /**
+     * Restore old data structure from backup
+     */
+    async restoreOldDataStructure(environments: ApiEnvironment[], schemas: LoadedSchema[], groups: ApiEnvironmentGroup[]): Promise<void> {
+        await this.context.globalState.update('apiEnvironments', environments);
+        await this.context.globalState.update('loadedSchemas', schemas);
+        await this.context.globalState.update('environmentGroups', groups);
+        await this.context.globalState.update('schemaFirstMigrationComplete', false);
     }
     
     // ========================

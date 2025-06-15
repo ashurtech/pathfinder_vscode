@@ -70,6 +70,9 @@ export function activate(context: vscode.ExtensionContext) {
     // Add disposables to subscriptions
     context.subscriptions.push(treeView, codeLensProviderDisposable);
     
+    // Check if migration to schema-first architecture is needed
+    checkAndPromptMigration();
+    
     console.log('✅ Pathfinder - OpenAPI Explorer is now active!');
 }
 
@@ -276,6 +279,45 @@ function registerCommands(context: vscode.ExtensionContext) {
         }
     );
     
+    // ========================
+    // Schema-First Architecture Commands (NEW)
+    // ========================
+    
+    const addApiSchemaCommand = vscode.commands.registerCommand(
+        'pathfinder.addApiSchema',
+        addApiSchemaHandler
+    );
+    
+    const loadNewSchemaCommand = vscode.commands.registerCommand(
+        'pathfinder.loadNewSchema',
+        loadNewSchemaHandler
+    );
+    
+    const addSchemaGroupCommand = vscode.commands.registerCommand(
+        'pathfinder.addSchemaGroup',
+        addSchemaGroupHandler
+    );
+    
+    const editSchemaGroupCommand = vscode.commands.registerCommand(
+        'pathfinder.editSchemaGroup',
+        (group: any) => editSchemaGroupHandler(group)
+    );
+    
+    const addSchemaToGroupCommand = vscode.commands.registerCommand(
+        'pathfinder.addSchemaToGroup',
+        (group: any) => addSchemaToGroupHandler(group)
+    );
+    
+    const addEnvironmentCommand2 = vscode.commands.registerCommand(
+        'pathfinder.addEnvironment2',
+        addEnvironmentHandler
+    );
+    
+    const migrateToSchemaFirstCommand = vscode.commands.registerCommand(
+        'pathfinder.migrateToSchemaFirst',
+        migrateToSchemaFirstHandler
+    );
+    
     // Add all commands to the context so they get cleaned up when the extension deactivates
     context.subscriptions.push(
         helloWorldCommand,
@@ -299,7 +341,14 @@ function registerCommands(context: vscode.ExtensionContext) {
         showSchemaInfoCommand,
         showStorageStatsCommand,
         resetSessionCommand,
-        factoryResetCommand
+        factoryResetCommand,
+        addApiSchemaCommand,
+        loadNewSchemaCommand,
+        addSchemaGroupCommand,
+        editSchemaGroupCommand,
+        addSchemaToGroupCommand,
+        addEnvironmentCommand2,
+        migrateToSchemaFirstCommand
     );
 }
 
@@ -1422,6 +1471,408 @@ async function toggleAuthVisibilityCommand(documentUri: vscode.Uri) {
         
     } catch (error) {
         vscode.window.showErrorMessage(`Failed to toggle auth visibility: ${error}`);
+    }
+}
+
+// ========================
+// Schema-First Architecture Command Handlers (NEW)
+// ========================
+
+/**
+ * Command to add a new API schema in schema-first architecture
+ */
+async function addApiSchemaHandler() {
+    try {
+        console.log('Adding new API schema...');
+        
+        const name = await vscode.window.showInputBox({
+            prompt: 'Enter a name for this API schema',
+            placeHolder: 'e.g., "Kibana API v8.0"'
+        });
+        
+        if (!name) {
+            return;
+        }
+        
+        const description = await vscode.window.showInputBox({
+            prompt: 'Enter a description (optional)',
+            placeHolder: 'e.g., "Kibana management API for APAC environment"'
+        });
+        
+        // For now, redirect to load schema - in the future we might have different flows
+        await loadNewSchemaHandler(name, description);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to add API schema: ${error}`);
+    }
+}
+
+/**
+ * Command to load a new schema in schema-first architecture
+ */
+async function loadNewSchemaHandler(name?: string, description?: string) {
+    try {
+        console.log('Loading new schema...');
+        
+        if (!name) {
+            name = await vscode.window.showInputBox({
+                prompt: 'Enter a name for this schema',
+                placeHolder: 'e.g., "Kibana API v8.0"'
+            });
+            
+            if (!name) {
+                return;
+            }
+        }
+        
+        const loadMethod = await vscode.window.showQuickPick([
+            { label: '🌐 Load from URL', value: 'url' },
+            { label: '📁 Load from file', value: 'file' }
+        ], {
+            placeHolder: 'How would you like to load the schema?'
+        });
+        
+        if (!loadMethod) {
+            return;
+        }
+        
+        let schemaData;
+        let source;
+        
+        if (loadMethod.value === 'url') {
+            const url = await vscode.window.showInputBox({
+                prompt: 'Enter the URL to the OpenAPI schema',
+                placeHolder: 'e.g., https://api.example.com/openapi.json'
+            });
+            
+            if (!url) {
+                return;
+            }
+            
+            source = url;
+            // Create a temporary environment for loading
+            const tempEnv = {
+                id: 'temp',
+                name: 'temp',
+                baseUrl: url,
+                auth: { type: 'none' as const },
+                createdAt: new Date()
+            };
+            schemaData = await schemaLoader.loadFromUrl(url, tempEnv);
+        } else {
+            const fileUri = await vscode.window.showOpenDialog({
+                canSelectMany: false,
+                filters: {
+                    'OpenAPI Files': ['json', 'yaml', 'yml']
+                }
+            });
+            
+            if (!fileUri || fileUri.length === 0) {
+                return;
+            }
+            
+            source = fileUri[0].fsPath;
+            // Create a temporary environment for loading
+            const tempEnv = {
+                id: 'temp',
+                name: 'temp',
+                baseUrl: 'file://' + fileUri[0].fsPath,
+                auth: { type: 'none' as const },
+                createdAt: new Date()
+            };
+            schemaData = await schemaLoader.loadFromFile(fileUri[0].fsPath, tempEnv);
+        }
+        
+        if (!schemaData) {
+            vscode.window.showErrorMessage('Failed to load schema');
+            return;
+        }
+        
+        // Create new ApiSchema object
+        const newSchema = {
+            id: `schema_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+            name,
+            description,
+            schema: schemaData.schema, // Extract the actual OpenAPI document
+            source,
+            loadedAt: new Date(),
+            lastUpdated: new Date(),
+            isValid: schemaData.isValid,
+            validationErrors: schemaData.validationErrors || [],
+            version: schemaData.schema.info?.version || '1.0.0'
+        };
+        
+        await configManager.saveApiSchema(newSchema);
+        treeProvider.refresh();
+        
+        vscode.window.showInformationMessage(`Schema "${name}" loaded successfully!`);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to load schema: ${error}`);
+    }
+}
+
+/**
+ * Command to add a new schema group
+ */
+async function addSchemaGroupHandler() {
+    try {
+        console.log('Adding new schema group...');
+        
+        const name = await vscode.window.showInputBox({
+            prompt: 'Enter a name for this schema group',
+            placeHolder: 'e.g., "Production APIs"'
+        });
+        
+        if (!name) {
+            return;
+        }
+        
+        const description = await vscode.window.showInputBox({
+            prompt: 'Enter a description (optional)',
+            placeHolder: 'e.g., "Production environment APIs"'
+        });
+        
+        const newGroup = {
+            id: `group_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+            name,
+            description,
+            createdAt: new Date()
+        };
+        
+        await configManager.saveApiSchemaGroup(newGroup);
+        treeProvider.refresh();
+        
+        vscode.window.showInformationMessage(`Schema group "${name}" created successfully!`);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to add schema group: ${error}`);
+    }
+}
+
+/**
+ * Command to edit a schema group
+ */
+async function editSchemaGroupHandler(group: any) {
+    try {
+        console.log('Editing schema group:', group.name);
+        
+        const name = await vscode.window.showInputBox({
+            prompt: 'Edit group name',
+            value: group.name
+        });
+        
+        if (!name) {
+            return;
+        }
+        
+        const description = await vscode.window.showInputBox({
+            prompt: 'Edit group description',
+            value: group.description || ''
+        });
+        
+        const updatedGroup = {
+            ...group,
+            name,
+            description
+        };
+        
+        await configManager.saveApiSchemaGroup(updatedGroup);
+        treeProvider.refresh();
+        
+        vscode.window.showInformationMessage(`Schema group "${name}" updated successfully!`);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to edit schema group: ${error}`);
+    }
+}
+
+/**
+ * Command to add schema to group
+ */
+async function addSchemaToGroupHandler(group: any) {
+    try {
+        console.log('Adding schema to group:', group.name);
+        
+        const schemas = await configManager.getUngroupedSchemas();
+        
+        if (schemas.length === 0) {
+            vscode.window.showInformationMessage('No ungrouped schemas available');
+            return;
+        }
+        
+        const selectedSchema = await vscode.window.showQuickPick(
+            schemas.map(schema => ({
+                label: schema.name,
+                description: schema.description,
+                value: schema
+            })),
+            {
+                placeHolder: 'Select a schema to add to the group'
+            }
+        );
+        
+        if (!selectedSchema) {
+            return;
+        }
+        
+        const updatedSchema = {
+            ...selectedSchema.value,
+            groupId: group.id
+        };
+        
+        await configManager.saveApiSchema(updatedSchema);
+        treeProvider.refresh();
+        
+        vscode.window.showInformationMessage(`Schema "${selectedSchema.label}" added to group "${group.name}"!`);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to add schema to group: ${error}`);
+    }
+}
+
+/**
+ * Command to add environment in schema-first architecture
+ */
+async function addEnvironmentHandler() {
+    try {
+        console.log('Adding new environment in schema-first architecture...');
+        
+        const schemas = await configManager.getApiSchemas();
+        
+        if (schemas.length === 0) {
+            vscode.window.showInformationMessage('No schemas available. Please add a schema first.');
+            return;
+        }
+        
+        const selectedSchema = await vscode.window.showQuickPick(
+            schemas.map(schema => ({
+                label: schema.name,
+                description: `v${schema.version} - ${schema.description || 'No description'}`,
+                value: schema
+            })),
+            {
+                placeHolder: 'Select a schema for this environment'
+            }
+        );
+        
+        if (!selectedSchema) {
+            return;
+        }
+        
+        const name = await vscode.window.showInputBox({
+            prompt: 'Enter a name for this environment',
+            placeHolder: 'e.g., "Production"'
+        });
+        
+        if (!name) {
+            return;
+        }
+        
+        const baseUrl = await vscode.window.showInputBox({
+            prompt: 'Enter the base URL for this environment',
+            placeHolder: 'e.g., "https://api.production.com"',
+            validateInput: (value) => {
+                try {
+                    new URL(value);
+                    return null;
+                } catch {
+                    return 'Please enter a valid URL';
+                }
+            }
+        });
+        
+        if (!baseUrl) {
+            return;
+        }
+        
+        const newEnvironment = {
+            id: `env_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+            schemaId: selectedSchema.value.id,
+            name,
+            baseUrl,
+            auth: { type: 'none' as const },
+            createdAt: new Date()
+        };
+        
+        await configManager.saveSchemaEnvironment(newEnvironment);
+        treeProvider.refresh();
+        
+        vscode.window.showInformationMessage(`Environment "${name}" created successfully!`);
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Failed to add environment: ${error}`);
+    }
+}
+
+/**
+ * Command to migrate from environment-first to schema-first architecture
+ */
+async function migrateToSchemaFirstHandler() {
+    try {
+        console.log('Starting migration to schema-first architecture...');
+        
+        const confirm = await vscode.window.showWarningMessage(
+            'This will migrate your environments to the new schema-first architecture. This action cannot be easily undone. Do you want to continue?',
+            'Yes, Migrate', 'Cancel'
+        );
+        
+        if (confirm !== 'Yes, Migrate') {
+            return;
+        }
+        
+        // Import the migration utility
+        const { DataMigration } = require('./migration/data-migration');
+        const migration = new DataMigration(configManager, schemaLoader);
+        
+        const result = await migration.migrateToSchemaFirst();
+        
+        if (result.success) {
+            await configManager.setMigrationComplete();
+            treeProvider.refresh();
+            
+            vscode.window.showInformationMessage(
+                `Migration completed! ${result.schemasCreated} schemas and ${result.environmentsMigrated} environments migrated.`
+            );
+        } else {
+            vscode.window.showErrorMessage(`Migration failed: ${result.error}`);
+        }
+        
+    } catch (error) {
+        vscode.window.showErrorMessage(`Migration failed: ${error}`);
+    }
+}
+
+/**
+ * Check if migration to schema-first architecture is needed and prompt user
+ */
+async function checkAndPromptMigration() {
+    try {
+        const isMigrationComplete = await configManager.isMigrationComplete();
+        
+        if (!isMigrationComplete) {
+            // Check if there are existing environments that could be migrated
+            const environments = await configManager.getApiEnvironments();
+            const schemas = await configManager.getLoadedSchemas();
+            
+            if (environments.length > 0 || schemas.length > 0) {
+                const response = await vscode.window.showInformationMessage(
+                    'Pathfinder has a new schema-first architecture for better organization. Would you like to migrate your existing environments?',
+                    'Migrate Now', 'Later', 'Learn More'
+                );
+                
+                if (response === 'Migrate Now') {
+                    await migrateToSchemaFirstHandler();
+                } else if (response === 'Learn More') {
+                    vscode.env.openExternal(vscode.Uri.parse('https://github.com/example/pathfinder-migration-guide'));
+                }
+            } else {
+                // No existing data, just mark migration as complete
+                await configManager.setMigrationComplete();
+            }
+        }
+    } catch (error) {
+        console.error('Failed to check migration status:', error);
     }
 }
 
