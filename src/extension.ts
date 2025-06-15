@@ -288,11 +288,6 @@ function registerCommands(context: vscode.ExtensionContext) {
         addApiSchemaHandler
     );
     
-    const loadNewSchemaCommand = vscode.commands.registerCommand(
-        'pathfinder.loadNewSchema',
-        loadNewSchemaHandler
-    );
-    
     const addSchemaGroupCommand = vscode.commands.registerCommand(
         'pathfinder.addSchemaGroup',
         addSchemaGroupHandler
@@ -343,7 +338,6 @@ function registerCommands(context: vscode.ExtensionContext) {
         resetSessionCommand,
         factoryResetCommand,
         addApiSchemaCommand,
-        loadNewSchemaCommand,
         addSchemaGroupCommand,
         editSchemaGroupCommand,
         addSchemaToGroupCommand,
@@ -1331,12 +1325,9 @@ async function importEnvironmentsAndGroupsHandler() {
         }
         for (const env of data.environments) {
             const sanitized = { ...env, auth: { ...env.auth } };
-            // @ts-expect-error: dynamic property
-            delete sanitized.auth["apiKeySecret"];
-            // @ts-expect-error: dynamic property
-            delete sanitized.auth["bearerTokenSecret"];
-            // @ts-expect-error: dynamic property
-            delete sanitized.auth["passwordSecret"];
+            delete (sanitized.auth as any).apiKeySecret;
+            delete (sanitized.auth as any).bearerTokenSecret;
+            delete (sanitized.auth as any).passwordSecret;
             await configManager.saveApiEnvironment(sanitized);
         }
         treeProvider.refresh();
