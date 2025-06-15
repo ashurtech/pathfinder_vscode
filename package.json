@@ -100,25 +100,57 @@
         "category": "Pathfinder"
       },
       {
-        "command": "pathfinder.addSchemaGroup",
-        "title": "New Environment Group",
+        "command": "pathfinder.addEnvironmentGroup",
+        "title": "Add Environment Group",
         "icon": "$(folder-opened)",
         "category": "Pathfinder"
       },
       {
+        "command": "pathfinder.addSchemaEnvironmentGroup",
+        "title": "Add Environment Group to Schema",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.addEnvironmentToGroup",
+        "title": "Add Environment to Group", 
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.editEnvironmentGroup",
+        "title": "Edit Environment Group",
+        "category": "Pathfinder"
+      },
+      {
         "command": "pathfinder.editSchemaGroup",
-        "title": "Edit Schema Group",
+        "title": "Edit Environment Group",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.renameSchema",
+        "title": "Rename Schema",
+        "icon": "$(edit)",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.renameEnvironment",
+        "title": "Rename Environment",
+        "icon": "$(edit)",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.renameGroup",
+        "title": "Rename Group",
+        "icon": "$(edit)",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.addEnvironmentGroup",
+        "title": "Add Environment Group",
         "category": "Pathfinder"
       },
       {
         "command": "pathfinder.addSchemaToGroup",
         "title": "Add Schema to Group",
-        "category": "Pathfinder"
-      },
-      {
-        "command": "pathfinder.addEnvironment2",
-        "title": "Add Environment",
-        "icon": "$(server-environment)",
         "category": "Pathfinder"
       },
       {
@@ -252,24 +284,14 @@
           "group": "navigation@2"
         },
         {
-          "command": "pathfinder.addEnvironment2",
+          "command": "pathfinder.exportEnvironmentsAndGroups",
           "when": "view == pathfinderExplorer",
           "group": "navigation@3"
         },
         {
-          "command": "pathfinder.addSchemaGroup",
-          "when": "view == pathfinderExplorer",
-          "group": "navigation@4"
-        },
-        {
-          "command": "pathfinder.exportEnvironmentsAndGroups",
-          "when": "view == pathfinderExplorer",
-          "group": "navigation@5"
-        },
-        {
           "command": "pathfinder.importEnvironmentsAndGroups",
           "when": "view == pathfinderExplorer",
-          "group": "navigation@6"
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
@@ -284,12 +306,22 @@
           "group": "management"
         },
         {
+          "command": "pathfinder.renameEnvironment",
+          "when": "view == pathfinderExplorer && (viewItem == environment || viewItem == environment-grouped)",
+          "group": "management"
+        },
+        {
           "command": "pathfinder.removeEnvironmentFromGroup",
           "when": "view == pathfinderExplorer && viewItem == environment-grouped",
           "group": "management"
         },
         {
           "command": "pathfinder.editGroup",
+          "when": "view == pathfinderExplorer && viewItem == environmentGroup",
+          "group": "management"
+        },
+        {
+          "command": "pathfinder.renameGroup",
           "when": "view == pathfinderExplorer && viewItem == environmentGroup",
           "group": "management"
         },
@@ -304,9 +336,9 @@
           "group": "generation"
         },
         {
-          "command": "pathfinder.addEnvironment2",
+          "command": "pathfinder.renameSchema",
           "when": "view == pathfinderExplorer && viewItem == apiSchema",
-          "group": "inline"
+          "group": "management"
         },
         {
           "command": "pathfinder.editSchemaGroup",

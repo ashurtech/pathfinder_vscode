@@ -389,9 +389,57 @@ export class ConfigurationManager {
         } else {
             groups.push(group);
         }
-        
-        await this.context.globalState.update('apiSchemaGroups', groups);
+          await this.context.globalState.update('apiSchemaGroups', groups);
         console.log(`Saved API schema group: ${group.name}`);
+    }
+    
+    /**
+     * Get schema environment groups for a specific schema
+     */
+    async getSchemaEnvironmentGroups(schemaId?: string): Promise<any[]> {
+        const groups = this.context.globalState.get<any[]>('schemaEnvironmentGroups', []);
+        const converted = groups.map(group => ({
+            ...group,
+            createdAt: new Date(group.createdAt)
+        }));
+        
+        if (schemaId) {
+            return converted.filter(group => group.schemaId === schemaId);
+        }
+        
+        return converted;    }
+    
+    /**
+     * Save a schema environment group
+     */
+    async saveSchemaEnvironmentGroup(group: any): Promise<void> {
+        const groups = await this.getSchemaEnvironmentGroups();
+        const existingIndex = groups.findIndex(g => g.id === group.id);
+        
+        if (existingIndex >= 0) {
+            groups[existingIndex] = group;
+        } else {
+            groups.push(group);
+        }
+        
+        await this.context.globalState.update('schemaEnvironmentGroups', groups);
+        console.log(`Saved schema environment group: ${group.name}`);
+    }
+    
+    /**
+     * Delete a schema environment group
+     */
+    async deleteSchemaEnvironmentGroup(groupId: string): Promise<boolean> {
+        const groups = await this.getSchemaEnvironmentGroups();
+        const filteredGroups = groups.filter(group => group.id !== groupId);
+        
+        if (filteredGroups.length === groups.length) {
+            return false; // Nothing was deleted
+        }
+        
+        await this.context.globalState.update('schemaEnvironmentGroups', filteredGroups);
+        console.log(`Deleted schema environment group: ${groupId}`);
+        return true;
     }
       /**
      * Get schemas that belong to a specific group
@@ -589,8 +637,7 @@ export class ConfigurationManager {
     
     /**
      * Get storage statistics (for debugging)
-     */
-    async getStorageStats(): Promise<{environmentCount: number, schemaCount: number}> {
+     */    async getStorageStats(): Promise<{environmentCount: number, schemaCount: number}> {
         const environments = await this.getApiEnvironments();
         const schemas = await this.getLoadedSchemas();
         
@@ -598,5 +645,30 @@ export class ConfigurationManager {
             environmentCount: environments.length,
             schemaCount: schemas.length
         };
+    }
+
+    // ========================
+    // Secret Storage Helper Methods
+    // ========================
+
+    /**
+     * Store a secret value securely using VS Code's SecretStorage
+     */
+    async storeSecret(key: string, value: string): Promise<void> {
+        await this.context.secrets.store(key, value);
+    }
+
+    /**
+     * Get a secret value from VS Code's SecretStorage
+     */
+    async getSecret(key: string): Promise<string | undefined> {
+        return await this.context.secrets.get(key);
+    }
+
+    /**
+     * Delete a secret from VS Code's SecretStorage
+     */
+    async deleteSecret(key: string): Promise<void> {
+        await this.context.secrets.delete(key);
     }
 }

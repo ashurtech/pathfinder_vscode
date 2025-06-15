@@ -434,14 +434,40 @@ export interface SchemaEnvironment {
     
     /** When this environment was last used */
     lastUsed?: Date;
-    
-    /** Environment type for visual grouping */
+      /** Environment type for visual grouping */
     type?: 'development' | 'testing' | 'staging' | 'production' | 'other';
+    
+    /** Optional environment group membership within a schema */
+    environmentGroupId?: string;
 }
 
 /**
- * Schema groups for organizing multiple schemas
- * Groups now organize schemas instead of environments
+ * Environment groups within a schema for organizing environments
+ * These are different from ApiSchemaGroup which organizes schemas
+ */
+export interface SchemaEnvironmentGroup {
+    /** Unique identifier for this group */
+    id: string;
+    
+    /** Which schema this group belongs to */
+    schemaId: string;
+    
+    /** Human-readable name */
+    name: string;
+    
+    /** Optional description */
+    description?: string;
+    
+    /** When this group was created */
+    createdAt: Date;
+    
+    /** Color/icon theme for visual distinction */
+    color?: 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow';
+}
+
+/**
+ * Groups for organizing multiple schemas
+ * These groups help organize schemas for better management
  */
 export interface ApiSchemaGroup {
     /** Unique identifier for this group */
