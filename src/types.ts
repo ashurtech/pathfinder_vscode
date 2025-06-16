@@ -9,59 +9,57 @@
 
 import { OpenAPIV3 } from 'openapi-types';
 
+// ========================
+// MIGRATION SUPPORT TYPES (TO BE REMOVED LATER)
+// These types are kept temporarily to support automatic migration
+// from environment-first to schema-first architecture
+// ========================
+
 /**
+ * @deprecated Legacy type for migration only
  * Represents a group of API environments that share the same schema
- * This allows organizing environments and performing batch operations
  */
 export interface ApiEnvironmentGroup {
-    /** Unique identifier for this group */
     id: string;
-    
-    /** Human-readable name for the group */
     name: string;
-    
-    /** Optional description of this group */
     description?: string;
-    
-    /** The shared schema ID that all environments in this group must use */
     sharedSchemaId?: string;
-    
-    /** When this group was created */
     createdAt: Date;
-    
-    /** Color/icon theme for visual distinction */
     color?: 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow';
 }
 
 /**
- * Represents a single API environment (like your different Kibana instances)
- * This is where we store the base URL and authentication details for each environment
+ * @deprecated Legacy type for migration only  
+ * Represents a single API environment (old architecture)
  */
 export interface ApiEnvironment {
-    /** Unique identifier for this environment (e.g., "kibana-apac-test") */
     id: string;
-    
-    /** Human-readable name (e.g., "Kibana APAC Test") */
     name: string;
-    
-    /** Base URL for the API (e.g., "https://kibana.apac-test-1.sand.wtg.zone") */
     baseUrl: string;
-    
-    /** Authentication configuration for this environment */
     auth: ApiAuthentication;
-    
-    /** Optional description of this environment */
     description?: string;
-    
-    /** Optional group membership - if set, this environment belongs to a group */
     groupId?: string;
-    
-    /** When this environment was created */
     createdAt: Date;
-    
-    /** When this environment was last used */
     lastUsed?: Date;
 }
+
+/**
+ * @deprecated Legacy type for migration only
+ * Represents a loaded OpenAPI schema with additional metadata (old architecture)
+ */
+export interface LoadedSchema {
+    environmentId: string;
+    schema: OpenAPIV3.Document;
+    source: string;
+    loadedAt: Date;
+    isValid: boolean;
+    validationErrors?: string[];
+    platformConfig?: RequestGeneratorConfig;
+}
+
+// ========================
+// CURRENT SCHEMA-FIRST TYPES
+// ========================
 
 /**
  * Different ways to authenticate with an API
@@ -88,33 +86,6 @@ export interface ApiAuthentication {
     
     /** For basic authentication - password */
     password?: string;
-}
-
-/**
- * Represents a loaded OpenAPI schema with additional metadata
- * This combines the raw OpenAPI spec with our own tracking information
- */
-export interface LoadedSchema {
-    /** Which environment this schema belongs to */
-    environmentId: string;
-    
-    /** The actual OpenAPI specification document */
-    schema: OpenAPIV3.Document;
-    
-    /** Where we loaded this schema from */
-    source: string;
-    
-    /** When we loaded this schema */
-    loadedAt: Date;
-    
-    /** Whether the schema passed validation */
-    isValid: boolean;
-    
-    /** Any validation errors we found */
-    validationErrors?: string[];
-    
-    /** Platform-specific configurations */
-    platformConfig?: RequestGeneratorConfig;
 }
 
 /**
@@ -201,7 +172,7 @@ export interface ApiParameter {
  * This will help us generate curl, Ansible, PowerShell commands
  */
 export interface CodeGenerationOptions {
-    /** Which format to generate (curl, ansible, powershell, etc.) */
+    /** Which format to generate (curl, ansible, powershell, javascript, python) */
     format: 'curl' | 'ansible' | 'powershell' | 'javascript' | 'python';
     
     /** Include authentication headers? */

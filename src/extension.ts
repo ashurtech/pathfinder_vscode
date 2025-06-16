@@ -22,10 +22,16 @@ import {
     generateCodeForEndpointCommand, 
     testEndpointCommand,
     showLoadSchemaOptionsCommand,
-    editEnvironmentCommand,
-    duplicateEnvironmentCommand,
-    confirmDeleteAction
+    duplicateEnvironmentCommand
 } from './tree-commands';
+import { AddSchemaWebview } from './webviews/add-schema-form';
+import { AddEnvironmentWebview } from './webviews/add-environment-form';
+import { AddEnvironmentGroupWebview } from './webviews/add-environment-group-form';
+import { EditEnvironmentGroupWebview } from './webviews/edit-environment-group-form';
+import { AddSchemaEnvironmentWebview } from './webviews/add-schema-environment-form';
+import { AddSchemaEnvironmentGroupWebview } from './webviews/add-schema-environment-group-form';
+import { AddEnvironmentToGroupWebview } from './webviews/add-environment-to-group-form';
+import { EditEnvironmentWebview } from './webviews/edit-environment-form';
 import { ApiEnvironment, EndpointInfo } from './types';
 
 // Global instances that will be used throughout the extension
@@ -38,7 +44,7 @@ let httpRunner: HttpRequestRunner;
  * This method is called when your extension is activated
  * VS Code calls this when the extension is first needed
  */
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     console.log('🚀 Pathfinder - OpenAPI Explorer is starting up!');
     
     // Initialize our core services
@@ -70,8 +76,8 @@ export function activate(context: vscode.ExtensionContext) {
     // Add disposables to subscriptions
     context.subscriptions.push(treeView, codeLensProviderDisposable);
     
-    // Check if migration to schema-first architecture is needed
-    checkAndPromptMigration();
+    // Force migration to schema-first architecture (auto-migrate)
+    await forceSchemaFirstMigration();
     
     console.log('✅ Pathfinder - OpenAPI Explorer is now active!');
 }
@@ -104,10 +110,7 @@ function registerCommands(context: vscode.ExtensionContext) {
         listApiEnvironmentsHandler
     );
     
-    const deleteEnvironmentCommand = vscode.commands.registerCommand(
-        'pathfinder.deleteEnvironment', 
-        deleteApiEnvironmentHandler
-    );
+
 
     // ========================
     // New Environment Management Commands
@@ -120,7 +123,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     const editEnvironmentCmd = vscode.commands.registerCommand(
         'pathfinder.editEnvironment',
-        (environment: ApiEnvironment) => editEnvironmentCommand(environment, configManager)
+        (environment: ApiEnvironment) => editEnvironmentHandler(environment, context)
     );
     
     const duplicateEnvironmentCmd = vscode.commands.registerCommand(
@@ -139,38 +142,18 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     const editGroupCommand = vscode.commands.registerCommand(
         'pathfinder.editGroup',
-        (group: any) => editGroupHandler(group)
+        (group: any) => editGroupHandler(group, context)
     );
     
-    const deleteGroupCommand = vscode.commands.registerCommand(
-        'pathfinder.deleteGroup',
-        (group: any) => deleteGroupHandler(group)
-    );
-    
-    const removeEnvironmentFromGroupCommand = vscode.commands.registerCommand(
-        'pathfinder.removeEnvironmentFromGroup',
-        (environment: ApiEnvironment) => removeEnvironmentFromGroupHandler(environment)
-    );
-    
-    const generateMultiEnvironmentCodeCommand = vscode.commands.registerCommand(
-        'pathfinder.generateMultiEnvironmentCode',
-        (group: any) => generateMultiEnvironmentCodeHandler(group)
-    );
-    
-    const showGroupDetailsCommand = vscode.commands.registerCommand(
-        'pathfinder.showGroupDetails',
-        (group: any) => showGroupDetailsHandler(group)
-    );
-    
-    const exportEnvironmentsAndGroupsCommand = vscode.commands.registerCommand(
-        'pathfinder.exportEnvironmentsAndGroups',
-        exportEnvironmentsAndGroupsHandler
-    );
 
-    const importEnvironmentsAndGroupsCommand = vscode.commands.registerCommand(
-        'pathfinder.importEnvironmentsAndGroups',
-        importEnvironmentsAndGroupsHandler
-    );
+    
+
+    
+
+    
+
+    
+
     
     // ========================
     // Schema Loading Commands
@@ -280,7 +263,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     const addApiSchemaCommand = vscode.commands.registerCommand(
         'pathfinder.addApiSchema',
-        addApiSchemaHandler
+        () => addApiSchemaHandler(context)
     );
     
     const editSchemaGroupCommand = vscode.commands.registerCommand(
@@ -290,12 +273,12 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     const editSchemaCommand = vscode.commands.registerCommand(
         'pathfinder.editSchema',
-        (schema: any) => editSchemaHandler(schema)
+        (schema: any) => editSchemaHandler(schema, context)
     );
     
     const addEnvironmentForSchemaCommand = vscode.commands.registerCommand(
         'pathfinder.addEnvironmentForSchema',
-        (schema: any) => addEnvironmentForSchemaHandler(schema)
+        (schema: any) => addEnvironmentForSchemaHandler(schema, context)
     );
     
     const deleteSchemaCommand = vscode.commands.registerCommand(
@@ -335,17 +318,17 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     const addSchemaEnvironmentGroupCommand = vscode.commands.registerCommand(
         'pathfinder.addSchemaEnvironmentGroup',
-        (schema: any) => addSchemaEnvironmentGroupHandler(schema)
+        (schema: any) => addSchemaEnvironmentGroupHandler(schema, context)
     );
     
     const addEnvironmentToGroupCommand2 = vscode.commands.registerCommand(
         'pathfinder.addEnvironmentToGroup',
-        (group: any, schema: any) => addEnvironmentToGroupHandler2(group, schema)
+        (group: any, schema: any) => addEnvironmentToGroupHandler2(group, schema, context)
     );
     
     const editEnvironmentGroupCommand = vscode.commands.registerCommand(
         'pathfinder.editEnvironmentGroup',
-        (group: any) => editEnvironmentGroupHandler(group)
+        (group: any) => editEnvironmentGroupHandler(group, context)
     );
 
     // ========================
@@ -372,18 +355,12 @@ function registerCommands(context: vscode.ExtensionContext) {
         helloWorldCommand,
         addEnvironmentCommand,
         listEnvironmentsCommand,
-        deleteEnvironmentCommand,
         showLoadSchemaOptionsCmd,
         editEnvironmentCmd,
         duplicateEnvironmentCmd,
         addEnvironmentGroupCommand,
         editGroupCommand,
-        deleteGroupCommand,
-        removeEnvironmentFromGroupCommand,
-        generateMultiEnvironmentCodeCommand,
-        showGroupDetailsCommand,
-        exportEnvironmentsAndGroupsCommand,
-        importEnvironmentsAndGroupsCommand,
+        loadSchemaFromUrlCommand,
         loadSchemaFromUrlCommand,
         loadSchemaFromFileCommand,
         showSchemaInfoCommand,
@@ -526,145 +503,21 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
  */
 async function addApiEnvironmentHandler(context: vscode.ExtensionContext) {
     try {
-        console.log('Adding new API environment...');
+        console.log('Opening add environment webview form...');
         
-        // Ask user for environment details using VS Code's input boxes
-        const name = await vscode.window.showInputBox({
-            prompt: 'Enter a name for this API environment',
-            placeHolder: 'e.g., "Kibana APAC Test"'
-        });
-        
-        if (!name) {
-            return; // User cancelled
-        }
-        
-        const baseUrl = await vscode.window.showInputBox({
-            prompt: 'Enter the base URL for this API',
-            placeHolder: 'e.g., "https://kibana.apac-test-1.sand.wtg.zone"',
-            validateInput: (value) => {
-                // Basic URL validation
-                try {
-                    new URL(value);
-                    return null; // Valid
-                } catch {
-                    return 'Please enter a valid URL';
-                }
+        const addEnvironmentWebview = new AddEnvironmentWebview(
+            context,
+            configManager,
+            () => {
+                treeProvider.refresh();
             }
-        });
+        );
         
-        if (!baseUrl) {
-            return; // User cancelled
-        }
-        
-        // Ask about authentication type
-        const authType = await vscode.window.showQuickPick([
-            { label: 'No Authentication', value: 'none' },
-            { label: 'API Key', value: 'apikey' },
-            { label: 'Bearer Token', value: 'bearer' },
-            { label: 'Basic Authentication', value: 'basic' }
-        ], {
-            placeHolder: 'Select authentication method'
-        });
-        
-        if (!authType) {
-            return; // User cancelled
-        }
-        
-        // Create the environment object
-        const environment: ApiEnvironment = {
-            id: configManager.generateEnvironmentId(),
-            name,
-            baseUrl,
-            auth: { type: authType.value as any },
-            createdAt: new Date()
-        };
-        
-        // Secure storage for secrets
-        const secretPrefix = `env:${environment.id}`;
-        if (authType.value === 'apikey') {
-            const apiKey = await vscode.window.showInputBox({
-                prompt: 'Enter your API key',
-                password: true // Hide the input
-            });
-            
-            if (!apiKey) {
-                return;
-            }
-            
-            const location = await vscode.window.showQuickPick([
-                { label: 'Header', value: 'header' },
-                { label: 'Query Parameter', value: 'query' }
-            ], {
-                placeHolder: 'Where should the API key be sent?'
-            });
-            
-            if (!location) {
-                return;
-            }
-            
-            const keyName = await vscode.window.showInputBox({
-                prompt: 'Enter the header/parameter name for the API key',
-                placeHolder: 'e.g., "X-API-Key" or "api_key"'
-            });
-            
-            if (!keyName) {
-                return;
-            }
-            
-            // Store API key in SecretStorage
-            await context.secrets.store(`${secretPrefix}:apiKey`, apiKey);
-            (environment.auth as any)["apiKeySecret"] = `${secretPrefix}:apiKey`;
-            environment.auth.apiKeyLocation = location.value as 'header' | 'query';
-            environment.auth.apiKeyName = keyName;
-            
-        } else if (authType.value === 'bearer') {
-            const token = await vscode.window.showInputBox({
-                prompt: 'Enter your bearer token',
-                password: true
-            });
-            
-            if (!token) {
-                return;
-            }
-            
-            // Store bearer token in SecretStorage
-            await context.secrets.store(`${secretPrefix}:bearerToken`, token);
-            (environment.auth as any)["bearerTokenSecret"] = `${secretPrefix}:bearerToken`;
-            
-        } else if (authType.value === 'basic') {
-            const username = await vscode.window.showInputBox({
-                prompt: 'Enter your username'
-            });
-            
-            if (!username) {
-                return;
-            }
-            
-            const password = await vscode.window.showInputBox({
-                prompt: 'Enter your password',
-                password: true
-            });
-            
-            if (!password) {
-                return;
-            }
-            
-            environment.auth.username = username;
-            await context.secrets.store(`${secretPrefix}:password`, password);
-            (environment.auth as any)["passwordSecret"] = `${secretPrefix}:password`;
-        }
-        
-        // Save the environment (without secrets)
-        await configManager.saveApiEnvironment(environment);
-        
-        // Refresh tree view to show new environment
-        treeProvider.refresh();
-        
-        vscode.window.showInformationMessage(`✅ Environment "${name}" has been saved!`);
+        await addEnvironmentWebview.show();
         
     } catch (error) {
-        console.error('Failed to add environment:', error);
-        vscode.window.showErrorMessage(`Failed to add environment: ${error}`);
+        console.error('Failed to open add environment form:', error);
+        vscode.window.showErrorMessage(`Failed to open add environment form: ${error}`);
     }
 }
 
@@ -711,42 +564,7 @@ async function listApiEnvironmentsHandler() {
     }
 }
 
-/**
- * Command to delete an API environment
- */
-async function deleteApiEnvironmentHandler() {
-    try {
-        const environments = await configManager.getApiEnvironments();
-        if (!environments || environments.length === 0) {
-            vscode.window.showInformationMessage('No API environments to delete.');
-            return;
-        }
-        const items = environments.map(env => ({
-            label: env.name,
-            description: env.baseUrl,
-            environment: env
-        }));
-        const selected = await vscode.window.showQuickPick(items, {
-            placeHolder: 'Select an environment to delete'
-        });
-        if (!selected?.environment) {
-            vscode.window.showInformationMessage('No environment selected for deletion.');
-            return;
-        }
-        // Use session-based confirmation dialog
-        const confirmed = await confirmDeleteAction(
-            `Are you sure you want to delete "${selected.environment.name ?? 'Unknown'}"?`
-        );
-        if (confirmed) {
-            await configManager.deleteApiEnvironment(selected.environment.id);
-            treeProvider.refresh();
-            vscode.window.showInformationMessage(`Environment "${selected.environment.name ?? 'Unknown'}" has been deleted.`);
-        }
-    } catch (error) {
-        console.error('Failed to delete environment:', error);
-        vscode.window.showErrorMessage(`Failed to delete environment: ${error instanceof Error ? error.message : String(error)}`);
-    }
-}
+
 
 /**
  * Command to load a schema from a URL
@@ -1044,331 +862,62 @@ async function showStorageStatsHandler() {
  */
 async function addEnvironmentGroupHandler() {
     try {
-        const name = await vscode.window.showInputBox({
-            prompt: 'Enter a name for this environment group',
-            placeHolder: 'e.g., "Kibana Environments", "Production APIs"'
-        });
+        console.log('Opening add environment group webview form...');
         
-        if (!name) {
-            return;
-        }
+        const addGroupWebview = new AddEnvironmentGroupWebview(
+            configManager,
+            () => {
+                treeProvider.refresh();
+            }
+        );
         
-        const description = await vscode.window.showInputBox({
-            prompt: 'Enter a description for this group (optional)',
-            placeHolder: 'e.g., "All Kibana test environments"'
-        });
-        
-        const colorOptions = [
-            { label: '🔵 Blue', value: 'blue' },
-            { label: '🟢 Green', value: 'green' },
-            { label: '🟠 Orange', value: 'orange' },
-            { label: '🟣 Purple', value: 'purple' },
-            { label: '🔴 Red', value: 'red' },
-            { label: '🟡 Yellow', value: 'yellow' }
-        ];
-        
-        const colorChoice = await vscode.window.showQuickPick(colorOptions, {
-            placeHolder: 'Choose a color theme for this group'
-        });
-        
-        const group = {
-            id: `group_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-            name: name.trim(),
-            description: description?.trim(),
-            color: (colorChoice?.value as 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow') ?? 'blue',
-            createdAt: new Date()
-        };
-        
-        await configManager.saveEnvironmentGroup(group);
-        treeProvider.refresh();
-        
-        vscode.window.showInformationMessage(`Environment group "${group.name}" created successfully!`);
+        await addGroupWebview.show();
         
     } catch (error) {
-        console.error('Failed to add environment group:', error);
-        vscode.window.showErrorMessage(`Failed to create group: ${error}`);
+        console.error('Failed to open add environment group form:', error);
+        vscode.window.showErrorMessage(`Failed to open add environment group form: ${error}`);
     }
 }
 
 /**
  * Command to edit an environment group
  */
-async function editGroupHandler(group: any) {
+async function editGroupHandler(group: any, context: vscode.ExtensionContext) {
     try {
-        const name = await vscode.window.showInputBox({
-            prompt: 'Group Name',
-            value: group.name
-        });
+        console.log('Opening edit environment group webview form...');
         
-        if (!name) {
-            return;
-        }
+        // Create and show the edit environment group webview form
+        const editEnvironmentGroupWebview = new EditEnvironmentGroupWebview(
+            context,
+            configManager,
+            group,
+            () => {
+                // Callback when group is updated - refresh the tree
+                treeProvider.refresh();
+            }
+        );
         
-        const description = await vscode.window.showInputBox({
-            prompt: 'Group Description (optional)',
-            value: group.description ?? ''
-        });
-        
-        const updatedGroup = {
-            ...group,
-            name: name.trim(),
-            description: description?.trim()
-        };
-        
-        await configManager.saveEnvironmentGroup(updatedGroup);
-        treeProvider.refresh();
-        
-        vscode.window.showInformationMessage(`Group "${name}" updated successfully!`);
+        await editEnvironmentGroupWebview.show();
         
     } catch (error) {
-        vscode.window.showErrorMessage(`Failed to update group: ${error}`);
+        console.error('Failed to open edit environment group form:', error);
+        vscode.window.showErrorMessage(`Failed to open edit environment group form: ${error}`);
     }
 }
 
-/**
- * Command to delete an environment group
- */
-async function deleteGroupHandler(group: any) {
-    try {
-        if (!group?.id) {
-            vscode.window.showErrorMessage('No group selected for deletion.');
-            return;
-        }
-        // Use session-based confirmation dialog
-        const confirmed = await confirmDeleteAction(
-            `Delete group "${group.name ?? 'Unknown'}"? Environments will be moved out of the group.`
-        );
-        if (confirmed) {
-            await configManager.deleteEnvironmentGroup(group.id);
-            treeProvider.refresh();
-            vscode.window.showInformationMessage(`Group "${group.name ?? 'Unknown'}" deleted.`);
-        }
-    } catch (error) {
-        vscode.window.showErrorMessage(`Failed to delete group: ${error instanceof Error ? error.message : String(error)}`);
-    }
-}
+
 
 /**
  * Command to add an environment to a group
- /**
- * Command to remove an environment from its group
- */
-async function removeEnvironmentFromGroupHandler(environment: any) {
-    try {
-        const confirm = await vscode.window.showWarningMessage(
-            `Remove "${environment.name}" from its group?`,
-            { modal: true },
-            'Remove from Group'
-        );
-        
-        if (confirm === 'Remove from Group') {
-            await configManager.moveEnvironmentToGroup(environment.id);
-            treeProvider.refresh();
-            vscode.window.showInformationMessage(`Environment "${environment.name}" removed from group.`);
-        }
-        
-    } catch (error) {
-        vscode.window.showErrorMessage(`Failed to remove environment from group: ${error}`);
-    }
-}
+ 
 
-/**
- * Command to generate code for all environments in a group
- */
-async function generateMultiEnvironmentCodeHandler(group: any) {
-    try {
-        const environments = await configManager.getEnvironmentsInGroup(group.id);
-        
-        if (environments.length === 0) {
-            vscode.window.showInformationMessage('No environments in this group.');
-            return;
-        }
-        
-        // Check if all environments have the same schema
-        const schemas = await Promise.all(
-            environments.map(env => configManager.getLoadedSchemas(env.id))
-        );
-        
-        const validSchemas = schemas.filter(schemaArray => schemaArray.length > 0);
-        
-        if (validSchemas.length === 0) {
-            vscode.window.showInformationMessage('No schemas loaded in group environments. Load schemas first.');
-            return;
-        }
-        
-        // For now, show a simple multi-environment code generation dialog
-        const formatOptions = [
-            { label: '💻 cURL Commands', value: 'curl' },
-            { label: '🔧 Ansible Tasks', value: 'ansible' },
-            { label: '⚡ PowerShell Scripts', value: 'powershell' },
-            { label: '🐍 Python Code', value: 'python' },
-            { label: '📜 JavaScript Code', value: 'javascript' }
-        ];
-        
-        const formatChoice = await vscode.window.showQuickPick(formatOptions, {
-            placeHolder: 'Choose code format to generate for all environments'
-        });
-        
-        if (formatChoice) {
-            let combinedCode = `# Multi-Environment ${formatChoice.label} for Group: ${group.name}\n`;
-            combinedCode += `# Generated on ${new Date().toLocaleString()}\n`;
-            combinedCode += `# Environments: ${environments.map(e => e.name).join(', ')}\n\n`;
-            
-            for (const env of environments) {
-                combinedCode += `## Environment: ${env.name}\n`;
-                combinedCode += `# Base URL: ${env.baseUrl}\n`;
-                combinedCode += `# Auth: ${env.auth.type}\n\n`;
-                
-                // For demonstration, generate a simple template
-                if (formatChoice.value === 'curl') {
-                    combinedCode += `curl -X GET "${env.baseUrl}/api/status" \\\n`;
-                    combinedCode += `  -H "Authorization: Bearer YOUR_TOKEN_HERE" \\\n`;
-                    combinedCode += `  -H "Content-Type: application/json"\n\n`;
-                }
-                // Add more formats as needed
-            }
-            
-            const doc = await vscode.workspace.openTextDocument({
-                content: combinedCode,
-                language: formatChoice.value === 'curl' ? 'shellscript' : formatChoice.value
-            });
-            
-            await vscode.window.showTextDocument(doc);
-        }
-        
-    } catch (error) {
-        vscode.window.showErrorMessage(`Failed to generate multi-environment code: ${error}`);
-    }
-}
 
-/**
- * Command to show group details
- */
-async function showGroupDetailsHandler(group: any) {
-    try {
-        const environments = await configManager.getEnvironmentsInGroup(group.id);
-        
-        const details = [
-            `${group.name}`,
-            `${'='.repeat(group.name.length)}`,
-            '',
-            group.description ? `Description: ${group.description}` : '',
-            `Color: ${group.color ?? 'blue'}`,
-            `Created: ${group.createdAt.toLocaleString()}`,
-            `Environments: ${environments.length}`,
-            '',
-            environments.length > 0 ? 'Environments in Group:' : '',
-            ...environments.map(env => `• ${env.name}: ${env.baseUrl}`)
-        ].filter(line => line !== '').join('\n');
-        
-        const doc = await vscode.workspace.openTextDocument({
-            content: details,
-            language: 'plaintext'
-        });
-        
-        await vscode.window.showTextDocument(doc);
-        
-    } catch (error) {
-        vscode.window.showErrorMessage(`Failed to show group details: ${error}`);
-    }
-}
 
-/**
- * Command to export all environments and groups to JSON or YAML
- */
-async function exportEnvironmentsAndGroupsHandler() {
-    try {
-        // Get environments and groups
-        const environments = await configManager.getApiEnvironments();
-        const groups = await configManager.getEnvironmentGroups();
-        // Remove secret references from environments before export
-        const sanitizedEnvironments = environments.map(env => {
-            const sanitized = { ...env, auth: { ...env.auth } };
-            // @ts-expect-error: dynamic property
-            delete sanitized.auth["apiKeySecret"];
-            // @ts-expect-error: dynamic property
-            delete sanitized.auth["bearerTokenSecret"];
-            // @ts-expect-error: dynamic property
-            delete sanitized.auth["passwordSecret"];
-            return sanitized;
-        });
-        const data = { environments: sanitizedEnvironments, groups };
-        const formats = [
-            { label: 'JSON', ext: 'json' },
-            { label: 'YAML', ext: 'yaml' }
-        ];
-        const format = await vscode.window.showQuickPick(formats, { placeHolder: 'Select export format' });
-        if (!format) {
-            return;
-        }
-        const uri = await vscode.window.showSaveDialog({
-            filters: { [format.label]: [format.ext] },
-            saveLabel: `Export as ${format.label}`
-        });
-        if (!uri) {
-            return;
-        }
-        let content = '';
-        if (format.ext === 'json') {
-            content = JSON.stringify(data, null, 2);
-        } else if (format.ext === 'yaml' && yaml) {
-            content = yaml.stringify(data);
-        } else {
-            vscode.window.showErrorMessage('YAML export requires the "yaml" npm package.');
-            return;
-        }
-        await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
-        vscode.window.showInformationMessage(`Exported environments and groups to ${uri.fsPath}`);
-    } catch (error) {
-        vscode.window.showErrorMessage(`Export failed: ${error}`);
-    }
-}
 
-/**
- * Command to import environments and groups from JSON or YAML
- */
-async function importEnvironmentsAndGroupsHandler() {
-    try {
-        const uri = await vscode.window.showOpenDialog({
-            canSelectMany: false,
-            filters: { 'JSON or YAML': ['json', 'yaml', 'yml'] },
-            openLabel: 'Import'
-        });
-        if (!uri || uri.length === 0) {
-            return;
-        }
-        const fileUri = uri[0];
-        const content = Buffer.from(await vscode.workspace.fs.readFile(fileUri)).toString('utf8');
-        let data: any;
-        if (fileUri.fsPath.endsWith('.json')) {
-            data = JSON.parse(content);
-        } else if ((fileUri.fsPath.endsWith('.yaml') || fileUri.fsPath.endsWith('.yml')) && yaml) {
-            data = yaml.parse(content);
-        } else {
-            vscode.window.showErrorMessage('Unsupported file format.');
-            return;
-        }
-        if (!data || !Array.isArray(data.environments) || !Array.isArray(data.groups)) {
-            vscode.window.showErrorMessage('Invalid import file format.');
-            return;
-        }
-        // Only import non-secret metadata
-        for (const group of data.groups) {
-            await configManager.saveEnvironmentGroup(group);
-        }
-        for (const env of data.environments) {
-            const sanitized = { ...env, auth: { ...env.auth } };
-            delete (sanitized.auth as any).apiKeySecret;
-            delete (sanitized.auth as any).bearerTokenSecret;
-            delete (sanitized.auth as any).passwordSecret;
-            await configManager.saveApiEnvironment(sanitized);
-        }
-        treeProvider.refresh();
-        vscode.window.showInformationMessage('Imported environments and groups. (Secrets must be re-entered manually)');
-    } catch (error) {
-        vscode.window.showErrorMessage(`Import failed: ${error}`);
-    }
-}
+
+
+
+
 
 /**
  * Ensure all required secrets for an environment are present in SecretStorage.
@@ -1505,29 +1054,26 @@ async function toggleAuthVisibilityCommand(documentUri: vscode.Uri) {
 /**
  * Command to add a new API schema in schema-first architecture
  */
-async function addApiSchemaHandler() {
+async function addApiSchemaHandler(context: vscode.ExtensionContext) {
     try {
-        console.log('Adding new API schema...');
+        console.log('Opening add schema webview form...');
         
-        const name = await vscode.window.showInputBox({
-            prompt: 'Enter a name for this API schema',
-            placeHolder: 'e.g., "Kibana API v8.0"'
-        });
+        // Create and show the webview form
+        const addSchemaWebview = new AddSchemaWebview(
+            context,
+            configManager,
+            schemaLoader,
+            () => {
+                // Callback when schema is added - refresh the tree
+                treeProvider.refresh();
+            }
+        );
         
-        if (!name) {
-            return;
-        }
-        
-        const description = await vscode.window.showInputBox({
-            prompt: 'Enter a description (optional)',
-            placeHolder: 'e.g., "Kibana management API for APAC environment"'
-        });
-        
-        // For now, redirect to load schema - in the future we might have different flows
-        await loadNewSchemaHandler(name, description);
+        await addSchemaWebview.show();
         
     } catch (error) {
-        vscode.window.showErrorMessage(`Failed to add API schema: ${error}`);
+        console.error('Failed to open add schema form:', error);
+        vscode.window.showErrorMessage(`Failed to open add schema form: ${error}`);
     }
 }
 
@@ -1676,135 +1222,79 @@ async function editSchemaGroupHandler(group: any) {
 /**
  * Command to add a new environment group within a schema
  */
-async function addSchemaEnvironmentGroupHandler(schema: any) {
+async function addSchemaEnvironmentGroupHandler(schema: any, context: vscode.ExtensionContext) {
     try {
-        console.log('Adding new environment group for schema:', schema.name);
+        console.log('Opening add schema environment group webview form...');
         
-        const name = await vscode.window.showInputBox({
-            prompt: 'Enter a name for this environment group',
-            placeHolder: 'e.g., "Development Environments", "Production Environments"'
-        });
+        // Create and show the add schema environment group webview form
+        const addSchemaEnvironmentGroupWebview = new AddSchemaEnvironmentGroupWebview(
+            context,
+            configManager,
+            schema,
+            () => {
+                // Callback when group is added - refresh the tree
+                treeProvider.refresh();
+            }
+        );
         
-        if (!name) {
-            return;
-        }
-        
-        const description = await vscode.window.showInputBox({
-            prompt: 'Enter a description (optional)',
-            placeHolder: 'e.g., "Development environment group"'
-        });
-        
-        const colorOptions = [
-            { label: '🔵 Blue', value: 'blue' },
-            { label: '🟢 Green', value: 'green' },
-            { label: '🟠 Orange', value: 'orange' },
-            { label: '🟣 Purple', value: 'purple' },
-            { label: '🔴 Red', value: 'red' },
-            { label: '🟡 Yellow', value: 'yellow' }
-        ];
-        
-        const colorChoice = await vscode.window.showQuickPick(colorOptions, {
-            placeHolder: 'Choose a color theme for this group'
-        });
-        
-        const newGroup = {
-            id: `envgroup_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-            schemaId: schema.id,
-            name,
-            description,
-            color: (colorChoice?.value as 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow') ?? 'blue',
-            createdAt: new Date()
-        };
-        
-        await configManager.saveSchemaEnvironmentGroup(newGroup);
-        treeProvider.refresh();
-        
-        vscode.window.showInformationMessage(`Environment group "${name}" created successfully!`);
+        await addSchemaEnvironmentGroupWebview.show();
         
     } catch (error) {
-        vscode.window.showErrorMessage(`Failed to add environment group: ${error}`);
+        console.error('Failed to open add schema environment group form:', error);
+        vscode.window.showErrorMessage(`Failed to open add schema environment group form: ${error}`);
     }
 }
 
 /**
  * Command to add an environment to an environment group within a schema
  */
-async function addEnvironmentToGroupHandler2(group: any, schema: any) {
+async function addEnvironmentToGroupHandler2(group: any, schema: any, context: vscode.ExtensionContext) {
     try {
-        console.log('Adding environment to group:', group.name, 'in schema:', schema.name);
+        console.log('Opening add environment to group webview form...');
         
-        const name = await vscode.window.showInputBox({
-            prompt: 'Enter a name for this environment',
-            placeHolder: 'e.g., "Development Server", "Test Environment"'
-        });
+        // Create and show the add environment to group webview form
+        const addEnvironmentToGroupWebview = new AddEnvironmentToGroupWebview(
+            context,
+            configManager,
+            group,
+            schema,
+            () => {
+                // Callback when environment is added - refresh the tree
+                treeProvider.refresh();
+            }
+        );
         
-        if (!name) {
-            return;
-        }
-        
-        const baseUrl = await vscode.window.showInputBox({
-            prompt: 'Enter the base URL for this environment',
-            placeHolder: 'e.g., "https://api.example.com"'
-        });
-        
-        if (!baseUrl) {
-            return;
-        }
-        
-        const newEnvironment = {
-            id: `env_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-            schemaId: schema.id,
-            environmentGroupId: group.id,
-            name,
-            baseUrl,
-            auth: { type: 'none' as const },
-            createdAt: new Date()
-        };
-        
-        await configManager.saveSchemaEnvironment(newEnvironment);
-        treeProvider.refresh();
-        
-        vscode.window.showInformationMessage(`Environment "${name}" added to group "${group.name}"!`);
+        await addEnvironmentToGroupWebview.show();
         
     } catch (error) {
-        vscode.window.showErrorMessage(`Failed to add environment to group: ${error}`);
+        console.error('Failed to open add environment to group form:', error);
+        vscode.window.showErrorMessage(`Failed to open add environment to group form: ${error}`);
     }
 }
 
 /**
  * Command to edit an environment group
  */
-async function editEnvironmentGroupHandler(group: any) {
+async function editEnvironmentGroupHandler(group: any, context: vscode.ExtensionContext) {
     try {
-        console.log('Editing environment group:', group.name);
+        console.log('Opening edit environment group webview form...');
         
-        const name = await vscode.window.showInputBox({
-            prompt: 'Edit group name',
-            value: group.name
-        });
+        // Create and show the edit environment group webview form
+        const editEnvironmentGroupWebview = new EditEnvironmentGroupWebview(
+            context,
+            configManager,
+            group,
+            () => {
+                // Callback when group is updated - refresh the tree
+                treeProvider.refresh();
+            }
+        );
         
-        if (!name) {
-            return;
-        }
-        
-        const description = await vscode.window.showInputBox({
-            prompt: 'Edit group description',
-            value: group.description || ''
-        });
-        
-        const updatedGroup = {
-            ...group,
-            name,
-            description
-        };
-        
-        await configManager.saveSchemaEnvironmentGroup(updatedGroup);
-        treeProvider.refresh();
-        
-        vscode.window.showInformationMessage(`Environment group "${name}" updated successfully!`);
+        await editEnvironmentGroupWebview.show();
         
     } catch (error) {
-        vscode.window.showErrorMessage(`Failed to edit environment group: ${error}`);
+        console.error('Failed to open edit environment group form:', error);
+        vscode.window.showErrorMessage(`Failed to open edit environment group form: ${error}`);
     }
 }
 
@@ -1965,35 +1455,52 @@ async function migrateToSchemaFirstHandler() {
 }
 
 /**
- * Check if migration to schema-first architecture is needed and prompt user
+ * Force migration to schema-first architecture on extension startup
+ * This automatically migrates any existing environment-first data
  */
-async function checkAndPromptMigration() {
+async function forceSchemaFirstMigration() {
     try {
         const isMigrationComplete = await configManager.isMigrationComplete();
         
         if (!isMigrationComplete) {
-            // Check if there are existing environments that could be migrated
+            console.log('🔄 Auto-migrating to schema-first architecture...');
+            
+            // Check if there are existing environments that need migration
             const environments = await configManager.getApiEnvironments();
             const schemas = await configManager.getLoadedSchemas();
             
             if (environments.length > 0 || schemas.length > 0) {
-                const response = await vscode.window.showInformationMessage(
-                    'Pathfinder has a new schema-first architecture for better organization. Would you like to migrate your existing environments?',
-                    'Migrate Now', 'Later', 'Learn More'
-                );
+                // Perform automatic migration without user prompt
+                const { DataMigration } = require('./migration/data-migration');
+                const migration = new DataMigration(configManager, schemaLoader);
                 
-                if (response === 'Migrate Now') {
-                    await migrateToSchemaFirstHandler();
-                } else if (response === 'Learn More') {
-                    vscode.env.openExternal(vscode.Uri.parse('https://github.com/example/pathfinder-migration-guide'));
+                const result = await migration.migrateToSchemaFirst();
+                
+                if (result.success) {
+                    await configManager.setMigrationComplete();
+                    console.log(`✅ Auto-migration completed! ${result.schemasCreated} schemas and ${result.environmentsMigrated} environments migrated.`);
+                    
+                    // Show success notification to user
+                    vscode.window.showInformationMessage(
+                        `Pathfinder has been upgraded to schema-first architecture! ${result.schemasCreated} schemas and ${result.environmentsMigrated} environments migrated.`
+                    );
+                } else {
+                    console.error('❌ Auto-migration failed:', result.errors);
+                    vscode.window.showWarningMessage(
+                        `Migration to schema-first architecture failed. Some features may not work correctly. Please check the console for details.`
+                    );
                 }
             } else {
                 // No existing data, just mark migration as complete
                 await configManager.setMigrationComplete();
+                console.log('✅ No data to migrate, marking migration as complete.');
             }
+        } else {
+            console.log('✅ Schema-first migration already complete.');
         }
     } catch (error) {
-        console.error('Failed to check migration status:', error);
+        console.error('❌ Failed to perform auto-migration:', error);
+        vscode.window.showErrorMessage(`Failed to migrate extension data: ${error}`);
     }
 }
 
@@ -2004,8 +1511,22 @@ async function checkAndPromptMigration() {
 /**
  * Command to rename a schema
  */
-async function renameSchemaHandler(schema: any) {
+async function renameSchemaHandler(schemaOrTreeItem: any) {
     try {
+        let schema: any;
+        
+        // Check if this is a tree item (from context menu) or direct schema object
+        if (schemaOrTreeItem?.schema) {
+            // It's a tree item from context menu - extract the schema
+            schema = schemaOrTreeItem.schema;
+        } else if (schemaOrTreeItem?.id && schemaOrTreeItem?.name) {
+            // It's a direct schema object
+            schema = schemaOrTreeItem;
+        } else {
+            vscode.window.showErrorMessage('No schema selected for renaming.');
+            return;
+        }
+        
         const newName = await vscode.window.showInputBox({
             prompt: 'Enter new name for the schema',
             value: schema.name,
@@ -2040,223 +1561,75 @@ async function renameSchemaHandler(schema: any) {
 /**
  * Command to edit a schema's settings
  */
-async function editSchemaHandler(schema: any) {
+async function editSchemaHandler(schema: any, context: vscode.ExtensionContext) {
     try {
-        // Show input boxes to edit schema properties
-        const newName = await vscode.window.showInputBox({
-            prompt: 'Enter schema name',
-            value: schema.name,
-            validateInput: (value) => {
-                if (!value.trim()) {
-                    return 'Schema name cannot be empty';
-                }
-                return null;
+        console.log('Opening edit schema webview form...');
+        
+        // Create and show the edit schema webview form
+        const { EditSchemaWebview } = await import('./webviews/edit-schema-form.js');
+        const editSchemaWebview = new EditSchemaWebview(
+            context,
+            configManager,
+            schema,
+            () => {
+                // Callback when schema is updated - refresh the tree
+                treeProvider.refresh();
             }
-        });
-
-        if (!newName) {
-            return; // User cancelled
-        }
-
-        const newDescription = await vscode.window.showInputBox({
-            prompt: 'Enter schema description (optional)',
-            value: schema.description || '',
-            placeHolder: 'Brief description of this API schema'
-        });
-
-        // Show quick pick for color selection
-        const colorOptions = [
-            { label: '🔵 Blue', value: 'blue' },
-            { label: '🟢 Green', value: 'green' },
-            { label: '🟠 Orange', value: 'orange' },
-            { label: '🟣 Purple', value: 'purple' },
-            { label: '🔴 Red', value: 'red' },
-            { label: '🟡 Yellow', value: 'yellow' }
-        ];
-
-        const selectedColor = await vscode.window.showQuickPick(colorOptions, {
-            placeHolder: 'Select a color theme for this schema',
-            ignoreFocusOut: true
-        });
-
-        // Update the schema
-        const updatedSchema = {
-            ...schema,
-            name: newName.trim(),
-            description: newDescription?.trim() || schema.description,
-            color: selectedColor?.value || schema.color,
-            lastUpdated: new Date()
-        };
-
-        await configManager.saveApiSchema(updatedSchema);
-        treeProvider.refresh();
-
-        vscode.window.showInformationMessage(`Schema "${newName}" updated successfully`);
-
+        );
+        
+        await editSchemaWebview.show();
+        
     } catch (error) {
-        vscode.window.showErrorMessage(`Failed to edit schema: ${error}`);
+        console.error('Failed to open edit schema form:', error);
+        vscode.window.showErrorMessage(`Failed to open edit schema form: ${error}`);
     }
 }
 
 /**
  * Command to add environment for a specific schema
  */
-async function addEnvironmentForSchemaHandler(schema: any) {
+async function addEnvironmentForSchemaHandler(schema: any, context: vscode.ExtensionContext) {
     try {
-        console.log('Adding new environment for schema:', schema.name);
+        console.log('Opening add schema environment webview form...');
         
-        const name = await vscode.window.showInputBox({
-            prompt: 'Enter a name for this environment',
-            placeHolder: 'e.g., "Production", "Development"'
-        });
-        
-        if (!name) {
-            return;
-        }
-        
-        const baseUrl = await vscode.window.showInputBox({
-            prompt: 'Enter the base URL for this environment',
-            placeHolder: 'e.g., "https://api.example.com"',
-            validateInput: (value) => {
-                // Basic URL validation
-                try {
-                    new URL(value);
-                    return null; // Valid
-                } catch {
-                    return 'Please enter a valid URL';
-                }
+        // Create and show the add schema environment webview form
+        const addSchemaEnvironmentWebview = new AddSchemaEnvironmentWebview(
+            context,
+            configManager,
+            schema,
+            () => {
+                // Callback when environment is added - refresh the tree
+                treeProvider.refresh();
             }
-        });
+        );
         
-        if (!baseUrl) {
-            return;
-        }
-        
-        // Ask about authentication type
-        const authType = await vscode.window.showQuickPick([
-            { label: 'No Authentication', value: 'none' },
-            { label: 'API Key', value: 'apikey' },
-            { label: 'Bearer Token', value: 'bearer' },
-            { label: 'Basic Authentication', value: 'basic' }
-        ], {
-            placeHolder: 'Select authentication method'
-        });
-        
-        if (!authType) {
-            return; // User cancelled
-        }
-        
-        // Create the environment object
-        const newEnvironment: any = {
-            id: `env_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-            schemaId: schema.id,
-            name: name.trim(),
-            baseUrl: baseUrl.trim(),
-            auth: { type: authType.value as any },
-            createdAt: new Date()
-        };
-        
-        // Handle authentication setup
-        const secretPrefix = `env:${newEnvironment.id}`;
-        if (authType.value === 'apikey') {
-            const apiKey = await vscode.window.showInputBox({
-                prompt: 'Enter your API key',
-                password: true // Hide the input
-            });
-            
-            if (!apiKey) {
-                return;
-            }
-            
-            const location = await vscode.window.showQuickPick([
-                { label: 'Header', value: 'header' },
-                { label: 'Query Parameter', value: 'query' }
-            ], {
-                placeHolder: 'Where should the API key be sent?'
-            });
-            
-            if (!location) {
-                return;
-            }
-            
-            const keyName = await vscode.window.showInputBox({
-                prompt: 'Enter the header/parameter name for the API key',
-                placeHolder: 'e.g., "X-API-Key" or "api_key"'
-            });
-            
-            if (!keyName) {
-                return;
-            }
-            
-            // Store API key in SecretStorage
-            await configManager.storeSecret(`${secretPrefix}:apiKey`, apiKey);
-            (newEnvironment.auth as any)["apiKeySecret"] = `${secretPrefix}:apiKey`;
-            newEnvironment.auth.apiKeyLocation = location.value as 'header' | 'query';
-            newEnvironment.auth.apiKeyName = keyName;
-            
-        } else if (authType.value === 'bearer') {
-            const token = await vscode.window.showInputBox({
-                prompt: 'Enter your bearer token',
-                password: true
-            });
-            
-            if (!token) {
-                return;
-            }
-            
-            // Store bearer token in SecretStorage
-            await configManager.storeSecret(`${secretPrefix}:bearerToken`, token);
-            (newEnvironment.auth as any)["bearerTokenSecret"] = `${secretPrefix}:bearerToken`;
-            
-        } else if (authType.value === 'basic') {
-            const username = await vscode.window.showInputBox({
-                prompt: 'Enter your username'
-            });
-            
-            if (!username) {
-                return;
-            }
-            
-            const password = await vscode.window.showInputBox({
-                prompt: 'Enter your password',
-                password: true
-            });
-            
-            if (!password) {
-                return;
-            }
-            
-            newEnvironment.auth.username = username;
-            await configManager.storeSecret(`${secretPrefix}:password`, password);
-            (newEnvironment.auth as any)["passwordSecret"] = `${secretPrefix}:password`;
-        }
-        
-        // Optional description
-        const description = await vscode.window.showInputBox({
-            prompt: 'Enter a description (optional)',
-            placeHolder: 'Brief description of this environment'
-        });
-        
-        if (description) {
-            newEnvironment.description = description.trim();
-        }
-        
-        await configManager.saveSchemaEnvironment(newEnvironment);
-        treeProvider.refresh();
-        
-        vscode.window.showInformationMessage(`✅ Environment "${name}" has been saved!`);
+        await addSchemaEnvironmentWebview.show();
         
     } catch (error) {
-        console.error('Failed to add environment for schema:', error);
-        vscode.window.showErrorMessage(`Failed to add environment: ${error}`);
+        console.error('Failed to open add schema environment form:', error);
+        vscode.window.showErrorMessage(`Failed to open add schema environment form: ${error}`);
     }
 }
 
 /**
  * Command to delete a schema and all its environments/groups
  */
-async function deleteSchemaHandler(schema: any) {
+async function deleteSchemaHandler(schemaOrTreeItem: any) {
     try {
+        let schema: any;
+        
+        // Check if this is a tree item (from context menu) or direct schema object
+        if (schemaOrTreeItem?.schema) {
+            // It's a tree item from context menu - extract the schema
+            schema = schemaOrTreeItem.schema;
+        } else if (schemaOrTreeItem?.id && schemaOrTreeItem?.name) {
+            // It's a direct schema object
+            schema = schemaOrTreeItem;
+        } else {
+            vscode.window.showErrorMessage('No schema selected for deletion.');
+            return;
+        }
+        
         const confirm = await vscode.window.showWarningMessage(
             `Delete schema "${schema.name}"?\n\nThis will also delete:\n• All environments using this schema\n• All environment groups in this schema\n\nThis action cannot be undone.`,
             { modal: true },
@@ -2291,8 +1664,22 @@ async function deleteSchemaHandler(schema: any) {
 /**
  * Command to delete a schema environment
  */
-async function deleteSchemaEnvironmentHandler(environment: any) {
+async function deleteSchemaEnvironmentHandler(environmentOrTreeItem: any) {
     try {
+        let environment: any;
+        
+        // Check if this is a tree item (from context menu) or direct environment object
+        if (environmentOrTreeItem?.environment) {
+            // It's a tree item from context menu - extract the environment
+            environment = environmentOrTreeItem.environment;
+        } else if (environmentOrTreeItem?.id && environmentOrTreeItem?.name) {
+            // It's a direct environment object
+            environment = environmentOrTreeItem;
+        } else {
+            vscode.window.showErrorMessage('No environment selected for deletion.');
+            return;
+        }
+        
         const confirm = await vscode.window.showWarningMessage(
             `Delete environment "${environment.name}"?\n\nThis action cannot be undone.`,
             { modal: true },
@@ -2313,8 +1700,22 @@ async function deleteSchemaEnvironmentHandler(environment: any) {
 /**
  * Command to delete a schema environment group and all its environments
  */
-async function deleteSchemaEnvironmentGroupHandler(group: any) {
+async function deleteSchemaEnvironmentGroupHandler(groupOrTreeItem: any) {
     try {
+        let group: any;
+        
+        // Check if this is a tree item (from context menu) or direct group object
+        if (groupOrTreeItem?.group) {
+            // It's a tree item from context menu - extract the group
+            group = groupOrTreeItem.group;
+        } else if (groupOrTreeItem?.id && groupOrTreeItem?.name) {
+            // It's a direct group object
+            group = groupOrTreeItem;
+        } else {
+            vscode.window.showErrorMessage('No group selected for deletion.');
+            return;
+        }
+        
         // Get environments in this group to show count
         const environments = await configManager.getSchemaEnvironments();
         const groupEnvironments = environments.filter((env: any) => env.environmentGroupId === group.id);
@@ -2417,10 +1818,50 @@ async function changeEnvironmentGroupColorHandler(group: any) {
 }
 
 /**
+ * Command to edit an environment using webview form
+ */
+async function editEnvironmentHandler(environment: ApiEnvironment, context: vscode.ExtensionContext) {
+    try {
+        console.log('Opening edit environment webview form...');
+        
+        // Create and show the edit environment webview form
+        const editEnvironmentWebview = new EditEnvironmentWebview(
+            context,
+            configManager,
+            environment,
+            () => {
+                // Callback when environment is updated - refresh the tree
+                treeProvider.refresh();
+            }
+        );
+        
+        await editEnvironmentWebview.show();
+        
+    } catch (error) {
+        console.error('Failed to open edit environment form:', error);
+        vscode.window.showErrorMessage(`Failed to open edit environment form: ${error}`);
+    }
+}
+
+/**
  * Command to rename an environment
  */
-async function renameEnvironmentHandler(environment: any) {
+async function renameEnvironmentHandler(environmentOrTreeItem: any) {
     try {
+        let environment: any;
+        
+        // Check if this is a tree item (from context menu) or direct environment object
+        if (environmentOrTreeItem?.environment) {
+            // It's a tree item from context menu - extract the environment
+            environment = environmentOrTreeItem.environment;
+        } else if (environmentOrTreeItem?.id && environmentOrTreeItem?.name) {
+            // It's a direct environment object
+            environment = environmentOrTreeItem;
+        } else {
+            vscode.window.showErrorMessage('No environment selected for renaming.');
+            return;
+        }
+        
         const newName = await vscode.window.showInputBox({
             prompt: 'Enter new name for the environment',
             value: environment.name,
@@ -2462,8 +1903,22 @@ async function renameEnvironmentHandler(environment: any) {
 /**
  * Command to rename a group
  */
-async function renameGroupHandler(group: any) {
+async function renameGroupHandler(groupOrTreeItem: any) {
     try {
+        let group: any;
+        
+        // Check if this is a tree item (from context menu) or direct group object
+        if (groupOrTreeItem?.group) {
+            // It's a tree item from context menu - extract the group
+            group = groupOrTreeItem.group;
+        } else if (groupOrTreeItem?.id && groupOrTreeItem?.name) {
+            // It's a direct group object
+            group = groupOrTreeItem;
+        } else {
+            vscode.window.showErrorMessage('No group selected for renaming.');
+            return;
+        }
+        
         const newName = await vscode.window.showInputBox({
             prompt: 'Enter new name for the group',
             value: group.name,

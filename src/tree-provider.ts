@@ -14,9 +14,6 @@ import * as vscode from 'vscode';
 import { ConfigurationManager } from './configuration';
 import { SchemaLoader } from './schema-loader';
 import { 
-    ApiEnvironment, 
-    ApiEnvironmentGroup, 
-    LoadedSchema, 
     ApiEndpoint,
     ApiSchema,
     SchemaEnvironment,
@@ -62,40 +59,16 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
     getTreeItem(element: TreeItem): vscode.TreeItem {
         return element;
     }
-    
-    /**
+      /**
      * Get the children of a tree element
      * This is the core method that builds the tree structure
-     * It now supports both old (environment-first) and new (schema-first) architectures
+     * Now uses only schema-first architecture (migration is forced on startup)
      */
-    async getChildren(element?: TreeItem): Promise<TreeItem[]> {        if (!element) {
-            // Root level - check if we should use schema-first or environment-first structure
-            const isMigrationComplete = await this.configManager.isMigrationComplete();
-            
-            if (isMigrationComplete) {
-                // Use new schema-first architecture
-                return this.getSchemas();
-            } else {
-                // Use old environment-first architecture
-                return this.getEnvironments();
-            }
-        }
-
-        // Handle different types of tree items for both architectures
-        if (element instanceof EnvironmentGroupTreeItem) {
-            return this.getGroupChildren(element);
-        } else if (element instanceof EnvironmentTreeItem) {
-            return this.getEnvironmentChildren(element);
-        } else if (element instanceof SchemaTreeItem) {
-            return this.getSchemaChildren(element);
-        } else if (element instanceof TagTreeItem) {
-            return this.getTagChildren(element);
-        } else if (element instanceof EndpointTreeItem) {
-            return this.getEndpointChildren(element);
-        } else if (element instanceof GenerateCommandsFolderTreeItem) {
-            return this.getGenerateCommandsChildren(element);
-        }
-          // Handle new schema-first tree items
+    async getChildren(element?: TreeItem): Promise<TreeItem[]> {
+        if (!element) {
+            // Root level - use schema-first architecture only
+            return this.getSchemas();
+        }        // Handle schema-first tree items only
         if (element instanceof ApiSchemaTreeItem) {
             return this.getApiSchemaChildren(element);
         } else if (element instanceof SchemaGroupTreeItem) {
@@ -104,152 +77,30 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
             return this.getSchemaEnvironmentChildren(element);
         } else if (element instanceof SchemaEnvironmentGroupTreeItem) {
             return this.getSchemaEnvironmentGroupChildren(element);
+        } else if (element instanceof TagTreeItem) {
+            return this.getTagChildren(element);
+        } else if (element instanceof EndpointTreeItem) {
+            return this.getEndpointChildren(element);
+        } else if (element instanceof GenerateCommandsFolderTreeItem) {
+            return this.getGenerateCommandsChildren(element);
         }
         
         return [];
     }
-    
-    /**
+      /**
      * Handle drag operation - what can be dragged
+     * Schema-first architecture doesn't support drag and drop
      */
     async handleDrag(source: TreeItem[], treeDataTransfer: vscode.DataTransfer): Promise<void> {
-        // Only allow dragging environments
-        const draggableItems = source.filter(item => item instanceof EnvironmentTreeItem);
-        if (draggableItems.length === 0) {
-            return;
-        }        // Store the environment IDs for transfer
-        const environmentIds = draggableItems.map(item => item.environment.id);
-        treeDataTransfer.set('application/vnd.code.tree.apitreeprovider', 
-            new vscode.DataTransferItem(JSON.stringify(environmentIds)));
-    }
-
-    /**
+        // Drag and drop disabled in schema-first architecture
+        return;
+    }    /**
      * Handle drop operation - where items can be dropped
+     * Schema-first architecture doesn't support drag and drop
      */
     async handleDrop(target: TreeItem | undefined, sources: vscode.DataTransfer): Promise<void> {
-        const transferItem = sources.get('application/vnd.code.tree.apitreeprovider');
-        if (!transferItem) {
-            return;
-        }
-
-        const environmentIds: string[] = JSON.parse(transferItem.value);
-        
-        if (target instanceof EnvironmentGroupTreeItem) {
-            // Dropping on a group - move environments to that group
-            await this.moveEnvironmentsToGroup(environmentIds, target.group.id);
-        } else if (!target || target instanceof ApiTreeProvider) {
-            // Dropping on root or empty space - move environments out of groups
-            await this.moveEnvironmentsToRoot(environmentIds);
-        }
-        
-        // Refresh the tree after the move
-        this.refresh();
-    }    /**
-     * Move environments to a specific group
-     */
-    private async moveEnvironmentsToGroup(environmentIds: string[], groupId: string): Promise<void> {
-        const group = (await this.configManager.getEnvironmentGroups()).find(g => g.id === groupId);
-        if (!group) {
-            vscode.window.showErrorMessage('Group not found');
-            return;
-        }
-
-        // Check schema compatibility if needed
-        if (group.sharedSchemaId) {
-            const canProceed = await this.checkSchemaCompatibility(environmentIds, group);
-            if (!canProceed) {
-                return;
-            }
-        }
-
-        // Move each environment to the group
-        for (const environmentId of environmentIds) {
-            await this.configManager.moveEnvironmentToGroup(environmentId, groupId);
-        }
-
-        vscode.window.showInformationMessage(
-            `Moved ${environmentIds.length} environment(s) to group "${group.name}"`
-        );
-    }
-
-    /**
-     * Check if environments are compatible with group's shared schema
-     */
-    private async checkSchemaCompatibility(environmentIds: string[], group: ApiEnvironmentGroup): Promise<boolean> {
-        const allSchemas = await this.configManager.getLoadedSchemas();
-        const incompatibleEnvs: string[] = [];
-        
-        for (const envId of environmentIds) {
-            const envSchemas = allSchemas.filter(schema => schema.environmentId === envId);
-            if (envSchemas.length > 0) {
-                const hasIncompatibleSchema = envSchemas.some(schema => 
-                    schema.source !== group.sharedSchemaId
-                );
-                if (hasIncompatibleSchema) {
-                    incompatibleEnvs.push(envId);
-                }
-            }
-        }
-        
-        if (incompatibleEnvs.length > 0) {
-            const proceed = await vscode.window.showWarningMessage(
-                `${incompatibleEnvs.length} environment(s) have different schemas than the group. Continue anyway?`,
-                'Yes', 'No'
-            );
-            return proceed === 'Yes';
-        }
-        
-        return true;
-    }
-
-    /**
-     * Move environments out of groups (to root level)
-     */
-    private async moveEnvironmentsToRoot(environmentIds: string[]): Promise<void> {
-        // Move each environment out of its group
-        for (const environmentId of environmentIds) {
-            await this.configManager.moveEnvironmentToGroup(environmentId);
-        }
-
-        vscode.window.showInformationMessage(
-            `Moved ${environmentIds.length} environment(s) to root level`
-        );
-    }
-    
-    /**
-     * Get the root level items: groups and ungrouped environments
-     */
-    private async getEnvironments(): Promise<TreeItem[]> {
-        try {
-            const items: TreeItem[] = [];
-            
-            // Add all environment groups
-            const groups = await this.configManager.getEnvironmentGroups();
-            items.push(...groups.map(group => new EnvironmentGroupTreeItem(group)));
-            
-            // Add ungrouped environments
-            const ungroupedEnvironments = await this.configManager.getUngroupedEnvironments();
-            items.push(...ungroupedEnvironments.map(env => new EnvironmentTreeItem(env)));
-            
-            if (items.length === 0) {
-                // Show helpful messages when nothing exists
-                return [
-                    new MessageTreeItem(
-                        'No environments or groups configured',
-                        'Click "Add Environment Group" or "Add API Environment" to get started',
-                        'add'
-                    )
-                ];
-            }
-            
-            return items;        } catch (error) {
-            console.error('Failed to load environments and groups for tree view:', error);
-            return [new MessageTreeItem(
-                'Error loading environments',
-                'Check the console for details',
-                'error'
-            )];
-        }
+        // Drag and drop disabled in schema-first architecture
+        return;
     }    /**
      * Get the root level items for schema-first architecture: all schemas at top level
      */
@@ -428,8 +279,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 'copy',
                 [envItem.environment]
             ));
-            
-            // Add schema endpoints organized by tags
+              // Add schema endpoints organized by tags
             const endpoints = this.schemaLoader.extractEndpoints(envItem.schemaItem.schema.schema);
             
             if (endpoints.length === 0) {
@@ -438,37 +288,17 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 // Group endpoints by tags for better organization
                 const tagGroups = this.groupEndpointsByTags(endpoints);
                 
-                // Create a temporary LoadedSchema for compatibility with existing tree items
-                const tempLoadedSchema: LoadedSchema = {
-                    environmentId: envItem.environment.id,
-                    schema: envItem.schemaItem.schema.schema,
-                    source: envItem.schemaItem.schema.source || 'Schema',
-                    loadedAt: envItem.schemaItem.schema.loadedAt || new Date(),
-                    isValid: envItem.schemaItem.schema.isValid || true,
-                    validationErrors: envItem.schemaItem.schema.validationErrors || []
-                };
-                
-                const tempEnvironment: ApiEnvironment = {
-                    id: envItem.environment.id,
-                    name: envItem.environment.name,
-                    baseUrl: envItem.environment.baseUrl,
-                    auth: envItem.environment.auth,
-                    createdAt: envItem.environment.createdAt
-                };
-                
-                const tempSchemaItem = new SchemaTreeItem(tempLoadedSchema, tempEnvironment);
-                
                 // Add tagged endpoint groups
                 for (const [tagName, taggedEndpoints] of tagGroups.entries()) {
                     if (tagName !== 'untagged') {
-                        children.push(new TagTreeItem(tagName, taggedEndpoints, tempSchemaItem));
+                        children.push(new TagTreeItem(tagName, taggedEndpoints, envItem.schemaItem));
                     }
                 }
                 
                 // Add untagged endpoints directly (if any)
                 const untaggedEndpoints = tagGroups.get('untagged') || [];
                 for (const endpoint of untaggedEndpoints) {
-                    children.push(new EndpointTreeItem(endpoint, tempSchemaItem));
+                    children.push(new EndpointTreeItem(endpoint, envItem.schemaItem));
                 }
             }
             
@@ -478,75 +308,8 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
             return [new MessageTreeItem('Error loading content', '', 'error')];
         }
     }
-    
-    /**
-     * Get children for an environment (load schema action + existing schemas)
-     */
-    private async getEnvironmentChildren(envItem: EnvironmentTreeItem): Promise<TreeItem[]> {
-        try {
-            const children: TreeItem[] = [];
-            
-            // Add "Load Schema" action item as first child
-            children.push(new LoadSchemaActionTreeItem(envItem.environment));
-            
-            // Add environment management actions
-            children.push(new EditEnvironmentActionTreeItem(envItem.environment));
-            children.push(new DuplicateEnvironmentActionTreeItem(envItem.environment));
-            
-            // Then add all existing schemas
-            const schemas = await this.configManager.getLoadedSchemas(envItem.environment.id);
-            
-            if (schemas.length === 0) {
-                children.push(new MessageTreeItem(
-                    'No schemas loaded',
-                    'Use "Load Schema" action above to add schemas',
-                    'file'
-                ));
-            } else {
-                children.push(...schemas.map(schema => new SchemaTreeItem(schema, envItem.environment)));
-            }
-            
-            return children;
-        } catch (error) {
-            console.error('Failed to load schemas for environment:', error);
-            return [new MessageTreeItem('Error loading schemas', '', 'error')];
-        }
-    }
-    
-    /**
-     * Get children for a schema (organized by tags, then endpoints)
-     */
-    private async getSchemaChildren(schemaItem: SchemaTreeItem): Promise<TreeItem[]> {
-        try {
-            const endpoints = this.schemaLoader.extractEndpoints(schemaItem.schema.schema);
-            
-            if (endpoints.length === 0) {
-                return [new MessageTreeItem('No endpoints found', '', 'info')];
-            }
-            
-            // Group endpoints by tags for better organization
-            const tagGroups = this.groupEndpointsByTags(endpoints);
-            const treeItems: TreeItem[] = [];
-            
-            // Add tagged endpoint groups
-            for (const [tagName, taggedEndpoints] of tagGroups.entries()) {
-                if (tagName !== 'untagged') {
-                    treeItems.push(new TagTreeItem(tagName, taggedEndpoints, schemaItem));
-                }
-            }
-            
-            // Add untagged endpoints directly (if any)
-            const untaggedEndpoints = tagGroups.get('untagged') || [];
-            for (const endpoint of untaggedEndpoints) {
-                treeItems.push(new EndpointTreeItem(endpoint, schemaItem));
-            }
-            
-            return treeItems;
-        } catch (error) {
-            console.error('Failed to extract endpoints:', error);
-            return [new MessageTreeItem('Error extracting endpoints', '', 'error')];
-        }
-    }
+  
+  
     
     /**
      * Get children for a tag (the endpoints in that tag)
@@ -646,37 +409,6 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
         
         return groups;
     }
-
-    /**
-     * Get children for a group (environments in the group + group management actions)
-     */
-    private async getGroupChildren(groupItem: EnvironmentGroupTreeItem): Promise<TreeItem[]> {
-        try {
-            const children: TreeItem[] = [];
-            
-            // Add group management actions
-            children.push(new AddEnvironmentToGroupActionTreeItem(groupItem.group));
-            children.push(new EditGroupActionTreeItem(groupItem.group));
-            children.push(new GenerateMultiEnvironmentCodeActionTreeItem(groupItem.group));
-            
-            // Add environments in this group
-            const environmentsInGroup = await this.configManager.getEnvironmentsInGroup(groupItem.group.id);
-            
-            if (environmentsInGroup.length === 0) {
-                children.push(new MessageTreeItem(
-                    'No environments in group',
-                    'Drag environments here or use "Add Environment to Group"',
-                    'folder'
-                ));
-            } else {
-                children.push(...environmentsInGroup.map(env => new EnvironmentTreeItem(env)));            }
-            
-            return children;
-        } catch (error) {
-            console.error('Failed to load group children:', error);
-            return [new MessageTreeItem('Error loading group', '', 'error')];
-        }
-    }
 }
 
 /**
@@ -691,94 +423,11 @@ export abstract class TreeItem extends vscode.TreeItem {
     }
 }
 
-/**
- * Tree item representing an environment group
- */
-class EnvironmentGroupTreeItem extends TreeItem {
-    constructor(public readonly group: ApiEnvironmentGroup) {
-        super(group.name, vscode.TreeItemCollapsibleState.Collapsed);
-        
-        // Use colored folder icon
-        const iconColor = group.color ?? 'yellow';
-        this.iconPath = new vscode.ThemeIcon('folder', new vscode.ThemeColor(`charts.${iconColor}`));
-        this.tooltip = `${group.name}\n${group.description ?? 'No description'}\nCreated: ${group.createdAt.toLocaleString()}`;
-        this.description = group.description;
-        
-        // Enable drag and drop
-        this.contextValue = 'environmentGroup';
-        
-        // Add resourceUri for context menu command argument resolution
-        this.resourceUri = vscode.Uri.parse(`pathfinder://group/${group.id}`);
-        
-        // Command to run when clicked
-        this.command = {
-            command: 'pathfinder.showGroupDetails',
-            title: 'Show Group Details',
-            arguments: [group]
-        };
-    }
 
-    // Helper to extract groupId from resourceUri
-    static getGroupIdFromResourceUri(uri: vscode.Uri): string | undefined {
-        const regex = /\/group\/([^/]+)/;
-        const match = regex.exec(uri.path);
-        return match ? match[1] : undefined;
-    }
-}
 
-/**
- * Tree item representing an API environment
- */
-class EnvironmentTreeItem extends TreeItem {
-    constructor(public readonly environment: ApiEnvironment) {
-        super(environment.name, vscode.TreeItemCollapsibleState.Collapsed);
-        
-        // Use colored server icon
-        this.iconPath = new vscode.ThemeIcon('server-environment', new vscode.ThemeColor('charts.blue'));
-        this.tooltip = `${environment.name}\n${environment.baseUrl}\nAuth: ${environment.auth.type}`;
-        this.description = environment.baseUrl;
-        
-        // Context value enables context menu items and drag/drop
-        this.contextValue = environment.groupId ? 'environment-grouped' : 'environment';
-        
-        // Enable drag and drop
-        this.resourceUri = vscode.Uri.parse(`pathfinder://environment/${environment.id}`);
-        
-        // Command to run when clicked (optional - shows environment details)
-        this.command = {
-            command: 'pathfinder.showEnvironmentDetails',
-            title: 'Show Environment Details',
-            arguments: [environment]
-        };
-    }
-}
 
-/**
- * Tree item representing a loaded OpenAPI schema
- */
-class SchemaTreeItem extends TreeItem {
-    constructor(
-        public readonly schema: LoadedSchema,
-        public readonly environment: ApiEnvironment
-    ) {
-        const info = new SchemaLoader().getSchemaInfo(schema.schema);
-        super(`${info.title} v${info.version}`, vscode.TreeItemCollapsibleState.Collapsed);
-        
-        // Use colored code icon for valid, red for invalid
-        this.iconPath = new vscode.ThemeIcon(schema.isValid ? 'file-code' : 'error', new vscode.ThemeColor(schema.isValid ? 'charts.green' : 'charts.red'));
-        this.tooltip = `${info.title} v${info.version}\n${info.endpointCount} endpoints\nLoaded: ${schema.loadedAt.toLocaleString()}`;
-        this.description = `${info.endpointCount} endpoints`;
-        
-        this.contextValue = 'schema';
-        
-        // Command to show schema details when clicked
-        this.command = {
-            command: 'pathfinder.showSchemaDetails',
-            title: 'Show Schema Details',
-            arguments: [schema]
-        };
-    }
-}
+
+
 
 /**
  * Tree item representing a group of endpoints with the same tag
@@ -787,7 +436,7 @@ class TagTreeItem extends TreeItem {
     constructor(
         public readonly tag: string,
         public readonly endpoints: ApiEndpoint[],
-        public readonly schemaItem: SchemaTreeItem
+        public readonly schemaItem: ApiSchemaTreeItem
     ) {
         super(tag, vscode.TreeItemCollapsibleState.Collapsed);
         // Use colored tag icon
@@ -804,7 +453,7 @@ class TagTreeItem extends TreeItem {
 class EndpointTreeItem extends TreeItem {
     constructor(
         public readonly endpoint: ApiEndpoint,
-        public readonly schemaItem: SchemaTreeItem
+        public readonly schemaItem: ApiSchemaTreeItem
     ) {
         // Compose a standout label: method, path, and all-caps method
         const method = endpoint.method.toUpperCase();
@@ -894,7 +543,7 @@ class EndpointActionTreeItem extends TreeItem {
 class GenerateCommandsFolderTreeItem extends TreeItem {
     constructor(
         public readonly endpoint: ApiEndpoint,
-        public readonly schemaItem: SchemaTreeItem
+        public readonly schemaItem: ApiSchemaTreeItem
     ) {
         super('Generate commands >', vscode.TreeItemCollapsibleState.Collapsed);
         
@@ -924,120 +573,17 @@ class MessageTreeItem extends TreeItem {
     }
 }
 
-/**
- * Tree item for "Load Schema" action under environments
- */
-class LoadSchemaActionTreeItem extends TreeItem {
-    constructor(public readonly environment: ApiEnvironment) {
-        super('📂 Load Schema...', vscode.TreeItemCollapsibleState.None);
-        
-        this.iconPath = new vscode.ThemeIcon('folder', new vscode.ThemeColor('charts.yellow'));
-        this.tooltip = 'Load a new OpenAPI schema into this environment';
-        this.contextValue = 'loadSchemaAction';
-        
-        // Show submenu when clicked
-        this.command = {
-            command: 'pathfinder.showLoadSchemaOptions',
-            title: 'Load Schema Options',
-            arguments: [environment]
-        };
-    }
-}
 
-/**
- * Tree item for "Edit Environment" action
- */
-class EditEnvironmentActionTreeItem extends TreeItem {
-    constructor(public readonly environment: ApiEnvironment) {
-        super('✏️ Edit Environment', vscode.TreeItemCollapsibleState.None);
-        
-        this.iconPath = new vscode.ThemeIcon('edit', new vscode.ThemeColor('charts.orange'));
-        this.tooltip = 'Edit this environment\'s settings';
-        this.contextValue = 'editEnvironmentAction';
-        
-        this.command = {
-            command: 'pathfinder.editEnvironment',
-            title: 'Edit Environment',
-            arguments: [environment]
-        };
-    }
-}
 
-/**
- * Tree item for "Duplicate Environment" action
- */
-class DuplicateEnvironmentActionTreeItem extends TreeItem {
-    constructor(public readonly environment: ApiEnvironment) {
-        super('📋 Duplicate Environment', vscode.TreeItemCollapsibleState.None);
-        
-        this.iconPath = new vscode.ThemeIcon('copy', new vscode.ThemeColor('charts.purple'));
-        this.tooltip = 'Create a copy of this environment';
-        this.contextValue = 'duplicateEnvironmentAction';
-        
-        this.command = {
-            command: 'pathfinder.duplicateEnvironment',
-            title: 'Duplicate Environment',
-            arguments: [environment]
-        };
-    }
-}
 
-/**
- * Tree item for "Add Environment to Group" action
- */
-class AddEnvironmentToGroupActionTreeItem extends TreeItem {
-    constructor(public readonly group: ApiEnvironmentGroup) {
-        super('➕ Add Environment to Group', vscode.TreeItemCollapsibleState.None);
-        
-        this.iconPath = new vscode.ThemeIcon('add');
-        this.tooltip = 'Add an existing environment to this group';
-        this.contextValue = 'addEnvironmentToGroupAction';
-        
-        this.command = {
-            command: 'pathfinder.addEnvironmentToGroup',
-            title: 'Add Environment to Group',
-            arguments: [group]
-        };
-    }
-}
 
-/**
- * Tree item for "Edit Group" action
- */
-class EditGroupActionTreeItem extends TreeItem {
-    constructor(public readonly group: ApiEnvironmentGroup) {
-        super('✏️ Edit Group', vscode.TreeItemCollapsibleState.None);
-        
-        this.iconPath = new vscode.ThemeIcon('edit');
-        this.tooltip = 'Edit this group\'s settings';
-        this.contextValue = 'editGroupAction';
-        
-        this.command = {
-            command: 'pathfinder.editGroup',
-            title: 'Edit Group',
-            arguments: [group]
-        };
-    }
-}
 
-/**
- * Tree item for "Generate Multi-Environment Code" action
- */
-class GenerateMultiEnvironmentCodeActionTreeItem extends TreeItem {
-    constructor(public readonly group: ApiEnvironmentGroup) {
-        super('🚀 Generate Code for All Environments', vscode.TreeItemCollapsibleState.None);
-        
-        this.iconPath = new vscode.ThemeIcon('rocket');
-        this.tooltip = 'Generate commands for all environments in this group';
-        this.contextValue = 'generateMultiEnvironmentCodeAction';
-        
-        this.command = {
-            command: 'pathfinder.generateMultiEnvironmentCode',
-            title: 'Generate Multi-Environment Code',
-            arguments: [group]
-        };
-    }
-}
+
+
+
+
+
+
 
 /**
  * Tree item representing an API schema

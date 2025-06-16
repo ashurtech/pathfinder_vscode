@@ -48,11 +48,6 @@
         "category": "Pathfinder"
       },
       {
-        "command": "pathfinder.deleteEnvironment",
-        "title": "Delete API Environment",
-        "category": "Pathfinder"
-      },
-      {
         "command": "pathfinder.loadSchemaFromUrl",
         "title": "Load Schema from URL",
         "category": "Pathfinder"
@@ -144,6 +139,41 @@
         "category": "Pathfinder"
       },
       {
+        "command": "pathfinder.deleteSchema",
+        "title": "Delete Schema",
+        "icon": "$(trash)",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.deleteSchemaEnvironment",
+        "title": "Delete Environment",
+        "icon": "$(trash)",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.deleteSchemaEnvironmentGroup",
+        "title": "Delete Environment Group",
+        "icon": "$(trash)",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.addEnvironmentForSchema",
+        "title": "Add Environment for Schema",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.changeSchemaColor",
+        "title": "Change Schema Color",
+        "icon": "$(symbol-color)",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.changeEnvironmentGroupColor",
+        "title": "Change Environment Group Color",
+        "icon": "$(symbol-color)",
+        "category": "Pathfinder"
+      },
+      {
         "command": "pathfinder.addEnvironmentGroup",
         "title": "Add Environment Group",
         "category": "Pathfinder"
@@ -164,28 +194,8 @@
         "category": "Pathfinder"
       },
       {
-        "command": "pathfinder.deleteGroup",
-        "title": "Delete Group",
-        "category": "Pathfinder"
-      },
-      {
         "command": "pathfinder.addEnvironmentToGroup",
         "title": "Add Environment to Group",
-        "category": "Pathfinder"
-      },
-      {
-        "command": "pathfinder.removeEnvironmentFromGroup",
-        "title": "Remove from Group",
-        "category": "Pathfinder"
-      },
-      {
-        "command": "pathfinder.generateMultiEnvironmentCode",
-        "title": "Generate Code for All Environments",
-        "category": "Pathfinder"
-      },
-      {
-        "command": "pathfinder.showGroupDetails",
-        "title": "Show Group Details",
         "category": "Pathfinder"
       },
       {
@@ -203,18 +213,6 @@
         "command": "pathfinder.toggleAuthVisibility",
         "title": "Toggle Authorization Visibility",
         "icon": "$(eye)",
-        "category": "Pathfinder"
-      },
-      {
-        "command": "pathfinder.exportEnvironmentsAndGroups",
-        "title": "Export Configuration",
-        "icon": "$(arrow-circle-up)",
-        "category": "Pathfinder"
-      },
-      {
-        "command": "pathfinder.importEnvironmentsAndGroups", 
-        "title": "Import Configuration",
-        "icon": "$(arrow-circle-down)",
         "category": "Pathfinder"
       },
       {
@@ -282,16 +280,6 @@
           "command": "pathfinder.addApiSchema",
           "when": "view == pathfinderExplorer", 
           "group": "navigation@2"
-        },
-        {
-          "command": "pathfinder.exportEnvironmentsAndGroups",
-          "when": "view == pathfinderExplorer",
-          "group": "navigation@3"
-        },
-        {
-          "command": "pathfinder.importEnvironmentsAndGroups",
-          "when": "view == pathfinderExplorer",
-          "group": "navigation@4"
         }
       ],
       "view/item/context": [
@@ -301,18 +289,8 @@
           "group": "inline"
         },
         {
-          "command": "pathfinder.deleteEnvironment",
-          "when": "view == pathfinderExplorer && (viewItem == environment || viewItem == environment-grouped)",
-          "group": "management"
-        },
-        {
           "command": "pathfinder.renameEnvironment",
           "when": "view == pathfinderExplorer && (viewItem == environment || viewItem == environment-grouped)",
-          "group": "management"
-        },
-        {
-          "command": "pathfinder.removeEnvironmentFromGroup",
-          "when": "view == pathfinderExplorer && viewItem == environment-grouped",
           "group": "management"
         },
         {
@@ -326,19 +304,44 @@
           "group": "management"
         },
         {
-          "command": "pathfinder.deleteGroup",
-          "when": "view == pathfinderExplorer && viewItem == environmentGroup",
-          "group": "management"
-        },
-        {
-          "command": "pathfinder.generateMultiEnvironmentCode",
-          "when": "view == pathfinderExplorer && viewItem == environmentGroup",
-          "group": "generation"
-        },
-        {
           "command": "pathfinder.renameSchema",
           "when": "view == pathfinderExplorer && viewItem == apiSchema",
           "group": "management"
+        },
+        {
+          "command": "pathfinder.deleteSchema",
+          "when": "view == pathfinderExplorer && viewItem == apiSchema",
+          "group": "management"
+        },
+        {
+          "command": "pathfinder.changeSchemaColor",
+          "when": "view == pathfinderExplorer && viewItem == apiSchema",
+          "group": "customization"
+        },
+        {
+          "command": "pathfinder.renameEnvironment",
+          "when": "view == pathfinderExplorer && viewItem == schemaEnvironment",
+          "group": "management"
+        },
+        {
+          "command": "pathfinder.deleteSchemaEnvironment",
+          "when": "view == pathfinderExplorer && viewItem == schemaEnvironment",
+          "group": "management"
+        },
+        {
+          "command": "pathfinder.editEnvironmentGroup",
+          "when": "view == pathfinderExplorer && viewItem == schemaEnvironmentGroup",
+          "group": "management"
+        },
+        {
+          "command": "pathfinder.deleteSchemaEnvironmentGroup",
+          "when": "view == pathfinderExplorer && viewItem == schemaEnvironmentGroup",
+          "group": "management"
+        },
+        {
+          "command": "pathfinder.changeEnvironmentGroupColor",
+          "when": "view == pathfinderExplorer && viewItem == schemaEnvironmentGroup",
+          "group": "customization"
         },
         {
           "command": "pathfinder.editSchemaGroup",
