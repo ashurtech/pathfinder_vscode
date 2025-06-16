@@ -308,7 +308,8 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 'copy',
                 [envItem.environment]
             ));
-              // Add schema endpoints organized by tags
+            
+            // Add schema endpoints organized by tags
             const endpoints = this.schemaLoader.extractEndpoints(envItem.schemaItem.schema.schema);
             
             if (endpoints.length === 0) {
@@ -327,7 +328,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 // Add untagged endpoints directly (if any)
                 const untaggedEndpoints = tagGroups.get('untagged') || [];
                 for (const endpoint of untaggedEndpoints) {
-                    children.push(new EndpointTreeItem(endpoint, envItem.schemaItem));
+                    children.push(new EndpointTreeItem(endpoint, envItem.schemaItem, envItem.environment));
                 }
             }
             
@@ -345,7 +346,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
      */
     private getTagChildren(tagItem: TagTreeItem): TreeItem[] {
         return tagItem.endpoints.map(endpoint => 
-            new EndpointTreeItem(endpoint, tagItem.schemaItem)
+            new EndpointTreeItem(endpoint, tagItem.schemaItem, tagItem.environment)
         );
     }    /**
      * Get children for an endpoint (action items like "View Details", "Generate cURL", etc.)
@@ -353,6 +354,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
     private getEndpointChildren(endpointItem: EndpointTreeItem): TreeItem[] {
         const endpoint = endpointItem.endpoint;
         const schemaItem = endpointItem.schemaItem;
+        const environment = endpointItem.environment;
         
         return [
             new EndpointActionTreeItem(
@@ -360,15 +362,15 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 'Show complete endpoint information',
                 'pathfinder.showEndpointDetails',
                 'info',
-                [endpoint, schemaItem]
+                [endpoint, { schema: schemaItem.schema, environment }]
             ),
-            new GenerateCommandsFolderTreeItem(endpoint, schemaItem),
+            new GenerateCommandsFolderTreeItem(endpoint, { schema: schemaItem.schema, environment }),
             new EndpointActionTreeItem(
                 '🚀 Run HTTP Request',
                 'Open HTTP request editor for this endpoint',
                 'pathfinder.runHttpRequest',
                 'play',
-                [endpoint, schemaItem]
+                [endpoint, { schema: schemaItem.schema, environment }]
             )
         ];
     }
@@ -465,7 +467,8 @@ class TagTreeItem extends TreeItem {
     constructor(
         public readonly tag: string,
         public readonly endpoints: ApiEndpoint[],
-        public readonly schemaItem: ApiSchemaTreeItem
+        public readonly schemaItem: ApiSchemaTreeItem,
+        public readonly environment: SchemaEnvironment
     ) {
         super(tag, vscode.TreeItemCollapsibleState.Collapsed);
         // Use colored tag icon
@@ -482,7 +485,8 @@ class TagTreeItem extends TreeItem {
 class EndpointTreeItem extends TreeItem {
     constructor(
         public readonly endpoint: ApiEndpoint,
-        public readonly schemaItem: ApiSchemaTreeItem
+        public readonly schemaItem: ApiSchemaTreeItem,
+        public readonly environment: SchemaEnvironment
     ) {
         // Compose a standout label: method, path, and all-caps method
         const method = endpoint.method.toUpperCase();
