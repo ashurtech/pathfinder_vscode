@@ -216,6 +216,18 @@
         "category": "Pathfinder"
       },
       {
+        "command": "pathfinder.exportConfiguration",
+        "title": "Export Configuration",
+        "icon": "$(arrow-circle-up)",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.importConfiguration",
+        "title": "Import Configuration",
+        "icon": "$(arrow-circle-down)",
+        "category": "Pathfinder"
+      },
+      {
         "command": "pathfinder.resetSession",
         "title": "Reset Pathfinder Session",
         "category": "Pathfinder"
@@ -280,6 +292,16 @@
           "command": "pathfinder.addApiSchema",
           "when": "view == pathfinderExplorer", 
           "group": "navigation@2"
+        },
+        {
+          "command": "pathfinder.exportConfiguration",
+          "when": "view == pathfinderExplorer",
+          "group": "navigation@3"
+        },
+        {
+          "command": "pathfinder.importConfiguration",
+          "when": "view == pathfinderExplorer",
+          "group": "navigation@4"
         }
       ],
       "view/item/context": [
