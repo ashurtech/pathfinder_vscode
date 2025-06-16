@@ -82,14 +82,14 @@ export class AddEnvironmentToGroupWebview {
             }
 
             // Create the new environment object
-            const newEnvironment = {
+            const newEnvironment: any = {
                 id: `env_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
                 schemaId: this.schema.id,
                 environmentGroupId: this.group.id,
                 name: data.name.trim(),
                 baseUrl: data.baseUrl.trim(),
                 description: data.description?.trim() || undefined,
-                auth: { type: 'none' as const },
+                auth: { type: 'none' },
                 createdAt: new Date()
             };
 

@@ -118,7 +118,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
             for (const envItem of draggedEnvironments) {
                 const env = envItem.environment;
                 env.environmentGroupId = targetGroup.id;
-                await this.configManager.updateSchemaEnvironment(env);
+                await this.configManager.saveSchemaEnvironment(env);
             }
             
             // Refresh the tree
@@ -132,7 +132,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
             for (const envItem of draggedEnvironments) {
                 const env = envItem.environment;
                 env.environmentGroupId = undefined;
-                await this.configManager.updateSchemaEnvironment(env);
+                await this.configManager.saveSchemaEnvironment(env);
             }
             
             // Refresh the tree

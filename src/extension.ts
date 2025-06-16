@@ -1143,10 +1143,30 @@ async function ensureEnvironmentSecrets(context: vscode.ExtensionContext, enviro
 async function runHttpRequestCommand(endpoint: any, schemaItem: any, context: vscode.ExtensionContext) {
     try {
         // Get the environment from the schema
-        const environment = await configManager.getApiEnvironment(schemaItem.environment.id);
-        if (!environment) {
-            vscode.window.showErrorMessage('Environment not found');
+        const environments = await configManager.getSchemaEnvironments(schemaItem.schema.id);
+        if (environments.length === 0) {
+            vscode.window.showErrorMessage('No environments found for this schema');
             return;
+        }
+
+        // If there's only one environment, use it
+        // Otherwise, let the user choose
+        let environment;
+        if (environments.length === 1) {
+            environment = environments[0];
+        } else {
+            const selectedEnv = await vscode.window.showQuickPick(
+                environments.map(env => ({
+                    label: env.name,
+                    description: env.baseUrl,
+                    environment: env
+                })),
+                { placeHolder: 'Select an environment to use for this request' }
+            );
+            if (!selectedEnv) {
+                return;
+            }
+            environment = selectedEnv.environment;
         }
 
         // Ensure secrets are present
