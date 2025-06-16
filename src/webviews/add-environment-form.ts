@@ -63,34 +63,60 @@ export class AddEnvironmentWebview {
                 name: data.name,
                 baseUrl: data.baseUrl,
                 description: data.description || '',
-                auth: data.auth,
-                customHeaders: data.customHeaders || {},
-                timeout: data.timeout || 30000,
+                auth: { type: 'none' as const },
                 createdAt: new Date(),
                 lastUsed: new Date()
             };
 
-            // If credentials were provided, store them
-            if (data.auth?.type !== 'none') {
-                let credentials: { username?: string; password?: string; apiKey?: string } = {};
-                
-                switch (data.auth.type) {
-                    case 'basic':
-                        credentials = {
-                            username: data.auth.username,
-                            password: data.auth.password
-                        };
-                        break;
+            // Handle authentication
+            if (data.authType && data.authType !== 'none') {
+                switch (data.authType) {
                     case 'apikey':
-                        credentials = {
-                            apiKey: data.auth.apiKey
+                        if (!data.apiKey?.trim()) {
+                            throw new Error('API Key is required for API Key authentication');
+                        }
+                        environment.auth = {
+                            type: 'apikey',
+                            apiKeyLocation: data.apiKeyLocation || 'header',
+                            apiKeyName: data.apiKeyName?.trim() || 'X-API-Key'
                         };
+                        // Store API key securely
+                        const secretKey = await this.configManager.setCredentials(environment, {
+                            apiKey: data.apiKey.trim()
+                        });
+                        environment.authSecretKey = secretKey;
+                        break;
+
+                    case 'bearer':
+                        if (!data.bearerToken?.trim()) {
+                            throw new Error('Bearer token is required for Bearer Token authentication');
+                        }
+                        environment.auth = {
+                            type: 'bearer'
+                        };
+                        // Store bearer token securely
+                        const tokenSecretKey = await this.configManager.setCredentials(environment, {
+                            apiKey: data.bearerToken.trim()
+                        });
+                        environment.authSecretKey = tokenSecretKey;
+                        break;
+
+                    case 'basic':
+                        if (!data.username?.trim() || !data.password?.trim()) {
+                            throw new Error('Username and password are required for Basic Authentication');
+                        }
+                        environment.auth = {
+                            type: 'basic',
+                            username: data.username.trim()
+                        };
+                        // Store password securely
+                        const basicSecretKey = await this.configManager.setCredentials(environment, {
+                            username: data.username.trim(),
+                            password: data.password.trim()
+                        });
+                        environment.authSecretKey = basicSecretKey;
                         break;
                 }
-
-                // Store credentials and get the secret key
-                const secretKey = await this.configManager.setCredentials(environment, credentials);
-                environment.authSecretKey = secretKey;
             }
 
             // Save the environment
@@ -102,7 +128,7 @@ export class AddEnvironmentWebview {
             // Refresh the tree view
             this.onSave();
 
-            vscode.window.showInformationMessage(`Environment "${data.name}" created successfully!`);
+            vscode.window.showInformationMessage(`Environment "${environment.name}" created successfully!`);
 
         } catch (error) {
             console.error('Failed to create environment:', error);

@@ -6,6 +6,18 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}"
+			],
+			"name": "Launch Extension",
+			"outFiles": [
+				"${workspaceFolder}/out/**/*.js"
+			],
+			"preLaunchTask": "npm",
+			"request": "launch",
+			"type": "extensionHost"
+		},
+		{
 			"name": "Run Extension",
 			"type": "extensionHost",
 			"request": "launch",
@@ -16,6 +28,46 @@
 				"${workspaceFolder}/dist/**/*.js"
 			],
 			"preLaunchTask": "${defaultBuildTask}"
+		},
+		{
+			"name": "Launch Extension Host (CLI)",
+			"type": "extensionHost",
+			"request": "launch",
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--disable-extensions",
+				"--new-window"
+			],
+			"outFiles": [
+				"${workspaceFolder}/dist/**/*.js"
+			],
+			"preLaunchTask": "${defaultBuildTask}",
+			"console": "integratedTerminal"
+		},
+		{
+			"name": "Launch with Specific VS Code",
+			"type": "extensionHost",
+			"request": "launch",
+			"runtimeExecutable": "C:\\Users\\z\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe",
+			"runtimeArgs": [
+				"--disable-extensions",
+				"--new-window",
+				"--no-sandbox",
+				"--disable-gpu",
+				"--force"
+			],
+			"args": [
+				"--extensionDevelopmentPath=${workspaceFolder}"
+			],
+			"outFiles": [
+				"${workspaceFolder}/dist/**/*.js"
+			],
+			"preLaunchTask": "${defaultBuildTask}",
+			"console": "integratedTerminal",
+			"env": {
+				"VSCODE_EXTENSION_DEVELOPMENT": "1",
+				"VSCODE_DISABLE_EXTENSIONS": "1"
+			}
 		}
 	]
 }
