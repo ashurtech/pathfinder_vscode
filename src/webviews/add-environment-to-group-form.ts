@@ -93,6 +93,56 @@ export class AddEnvironmentToGroupWebview {
                 createdAt: new Date()
             };
 
+            // Handle authentication if provided
+            if (data.auth?.type && data.auth.type !== 'none') {
+                switch (data.auth.type) {
+                    case 'apikey':
+                        if (!data.auth.apiKey?.trim()) {
+                            throw new Error('API Key is required for API Key Authentication');
+                        }
+                        newEnvironment.auth = {
+                            type: 'apikey',
+                            keyName: data.auth.keyName?.trim() || 'X-API-Key'
+                        };
+                        // Store API key securely
+                        const apiKeySecretKey = await this.configManager.setCredentials(newEnvironment, {
+                            apiKey: data.auth.apiKey.trim()
+                        });
+                        newEnvironment.authSecretKey = apiKeySecretKey;
+                        break;
+
+                    case 'bearer':
+                        if (!data.auth.token?.trim()) {
+                            throw new Error('Bearer token is required for Bearer Authentication');
+                        }
+                        newEnvironment.auth = {
+                            type: 'bearer'
+                        };
+                        // Store bearer token securely
+                        const bearerSecretKey = await this.configManager.setCredentials(newEnvironment, {
+                            apiKey: data.auth.token.trim()
+                        });
+                        newEnvironment.authSecretKey = bearerSecretKey;
+                        break;
+
+                    case 'basic':
+                        if (!data.auth.username?.trim() || !data.auth.password?.trim()) {
+                            throw new Error('Username and password are required for Basic Authentication');
+                        }
+                        newEnvironment.auth = {
+                            type: 'basic',
+                            username: data.auth.username.trim()
+                        };
+                        // Store password securely
+                        const basicSecretKey = await this.configManager.setCredentials(newEnvironment, {
+                            username: data.auth.username.trim(),
+                            password: data.auth.password.trim()
+                        });
+                        newEnvironment.authSecretKey = basicSecretKey;
+                        break;
+                }
+            }
+
             // Save the environment
             await this.configManager.saveSchemaEnvironment(newEnvironment);
 
@@ -378,6 +428,54 @@ export class AddEnvironmentToGroupWebview {
                 <div class="help-text">Optional description to help identify this environment</div>
             </div>
 
+            <div class="form-group">
+                <label for="authType">Authentication</label>
+                <select id="authType" name="auth.type">
+                    <option value="none">No Authentication</option>
+                    <option value="apikey">API Key</option>
+                    <option value="bearer">Bearer Token</option>
+                    <option value="basic">Basic Authentication</option>
+                </select>
+                <div class="help-text">Select the authentication method for this environment</div>
+            </div>
+
+            <!-- API Key Authentication Fields -->
+            <div id="apikeyFields" class="auth-fields">
+                <div class="form-group">
+                    <label for="keyName">Key Name</label>
+                    <input type="text" id="keyName" name="auth.keyName" placeholder="e.g., 'X-API-Key'">
+                    <div class="hint">The header name for the API key</div>
+                </div>
+                <div class="form-group">
+                    <label for="apiKey">API Key <span class="required">*</span></label>
+                    <input type="password" id="apiKey" name="auth.apiKey" placeholder="Enter your API key">
+                    <div class="hint">The API key value</div>
+                </div>
+            </div>
+
+            <!-- Bearer Token Authentication Fields -->
+            <div id="bearerFields" class="auth-fields">
+                <div class="form-group">
+                    <label for="bearerToken">Bearer Token <span class="required">*</span></label>
+                    <input type="password" id="bearerToken" name="auth.token" placeholder="Enter your bearer token">
+                    <div class="hint">The bearer token value</div>
+                </div>
+            </div>
+
+            <!-- Basic Authentication Fields -->
+            <div id="basicFields" class="auth-fields">
+                <div class="form-group">
+                    <label for="username">Username <span class="required">*</span></label>
+                    <input type="text" id="username" name="auth.username" placeholder="Enter username">
+                    <div class="hint">The username for basic authentication</div>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password <span class="required">*</span></label>
+                    <input type="password" id="password" name="auth.password" placeholder="Enter password">
+                    <div class="hint">The password for basic authentication</div>
+                </div>
+            </div>
+
             <div class="button-group">
                 <button type="submit" class="btn-primary" id="submitBtn">
                     Add Environment
@@ -401,6 +499,7 @@ export class AddEnvironmentToGroupWebview {
         const nameInput = document.getElementById('name');
         const baseUrlInput = document.getElementById('baseUrl');
         const descriptionInput = document.getElementById('description');
+        const authTypeSelect = document.getElementById('authType');
         const submitBtn = document.getElementById('submitBtn');
         const cancelBtn = document.getElementById('cancelBtn');
         const errorMessage = document.getElementById('errorMessage');
@@ -410,6 +509,11 @@ export class AddEnvironmentToGroupWebview {
         const nameError = document.getElementById('nameError');
         const baseUrlError = document.getElementById('baseUrlError');
         const baseUrlSuccess = document.getElementById('baseUrlSuccess');
+
+        // Authentication fields
+        const apikeyFields = document.getElementById('apikeyFields');
+        const bearerFields = document.getElementById('bearerFields');
+        const basicFields = document.getElementById('basicFields');
 
         // Form validation
         let isValidUrl = false;
@@ -450,6 +554,29 @@ export class AddEnvironmentToGroupWebview {
             submitBtn.disabled = !name || !url || !isValidUrl;
         }
 
+        // Handle authentication type change
+        authTypeSelect.addEventListener('change', () => {
+            const authType = authTypeSelect.value;
+            
+            // Hide all auth fields
+            apikeyFields.classList.remove('show');
+            bearerFields.classList.remove('show');
+            basicFields.classList.remove('show');
+            
+            // Show relevant fields
+            switch (authType) {
+                case 'apikey':
+                    apikeyFields.classList.add('show');
+                    break;
+                case 'bearer':
+                    bearerFields.classList.add('show');
+                    break;
+                case 'basic':
+                    basicFields.classList.add('show');
+                    break;
+            }
+        });
+
         // Form submission
         form.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -457,25 +584,69 @@ export class AddEnvironmentToGroupWebview {
             const formData = {
                 name: nameInput.value.trim(),
                 baseUrl: baseUrlInput.value.trim(),
-                description: descriptionInput.value.trim()
+                description: descriptionInput.value.trim(),
+                auth: {
+                    type: authTypeSelect.value
+                }
             };
-
+            
+            // Add auth-specific fields
+            switch (formData.auth.type) {
+                case 'apikey':
+                    formData.auth.keyName = document.getElementById('keyName').value.trim();
+                    formData.auth.apiKey = document.getElementById('apiKey').value.trim();
+                    break;
+                case 'bearer':
+                    formData.auth.token = document.getElementById('bearerToken').value.trim();
+                    break;
+                case 'basic':
+                    formData.auth.username = document.getElementById('username').value.trim();
+                    formData.auth.password = document.getElementById('password').value.trim();
+                    break;
+            }
+            
             // Basic validation
             if (!formData.name) {
                 showFieldError('name', 'Environment name is required');
                 return;
             }
-
+            
             if (!formData.baseUrl) {
                 showFieldError('baseUrl', 'Base URL is required');
                 return;
             }
-
-            if (!isValidUrl) {
+            
+            // Validate URL format
+            try {
+                new URL(formData.baseUrl);
+            } catch {
                 showFieldError('baseUrl', 'Please enter a valid URL');
                 return;
             }
-
+            
+            // Validate auth fields
+            switch (formData.auth.type) {
+                case 'apikey':
+                    if (!formData.auth.apiKey) {
+                        showFieldError('apiKey', 'API Key is required');
+                        return;
+                    }
+                    break;
+                case 'bearer':
+                    if (!formData.auth.token) {
+                        showFieldError('bearerToken', 'Bearer token is required');
+                        return;
+                    }
+                    break;
+                case 'basic':
+                    if (!formData.auth.username || !formData.auth.password) {
+                        showFieldError('username', 'Username is required');
+                        showFieldError('password', 'Password is required');
+                        return;
+                    }
+                    break;
+            }
+            
             vscode.postMessage({
                 command: 'submitForm',
                 data: formData

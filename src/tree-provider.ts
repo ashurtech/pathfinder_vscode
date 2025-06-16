@@ -89,19 +89,58 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
     }
       /**
      * Handle drag operation - what can be dragged
-     * Schema-first architecture doesn't support drag and drop
      */
     async handleDrag(source: TreeItem[], treeDataTransfer: vscode.DataTransfer): Promise<void> {
-        // Drag and drop disabled in schema-first architecture
-        return;
-    }    /**
+        // Only allow dragging SchemaEnvironmentTreeItems
+        const environments = source.filter(item => item instanceof SchemaEnvironmentTreeItem);
+        if (environments.length === 0) return;
+
+        // Add the dragged items to the transfer
+        const transferItem = new vscode.DataTransferItem(environments);
+        treeDataTransfer.set('application/vnd.code.tree.apitreeprovider', transferItem);
+    }
+    /**
      * Handle drop operation - where items can be dropped
-     * Schema-first architecture doesn't support drag and drop
      */
     async handleDrop(target: TreeItem | undefined, sources: vscode.DataTransfer): Promise<void> {
-        // Drag and drop disabled in schema-first architecture
-        return;
-    }    /**
+        // Get the dragged environments
+        const transferItem = sources.get('application/vnd.code.tree.apitreeprovider');
+        if (!transferItem) return;
+
+        const draggedEnvironments = transferItem.value as SchemaEnvironmentTreeItem[];
+        if (!draggedEnvironments.length) return;
+
+        // Handle dropping into a group
+        if (target instanceof SchemaEnvironmentGroupTreeItem) {
+            const targetGroup = target.group;
+            
+            // Update each environment's group
+            for (const envItem of draggedEnvironments) {
+                const env = envItem.environment;
+                env.environmentGroupId = targetGroup.id;
+                await this.configManager.updateSchemaEnvironment(env);
+            }
+            
+            // Refresh the tree
+            this.refresh();
+            return;
+        }
+
+        // Handle dropping at root level (ungrouping)
+        if (!target) {
+            // Update each environment to remove group
+            for (const envItem of draggedEnvironments) {
+                const env = envItem.environment;
+                env.environmentGroupId = undefined;
+                await this.configManager.updateSchemaEnvironment(env);
+            }
+            
+            // Refresh the tree
+            this.refresh();
+            return;
+        }
+    }
+    /**
      * Get the root level items for schema-first architecture: all schemas at top level
      */
     private async getSchemas(): Promise<TreeItem[]> {
