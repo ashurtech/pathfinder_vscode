@@ -1,11 +1,19 @@
 import * as vscode from 'vscode';
 import { ConfigurationManager } from '../configuration';
+import { SchemaEnvironmentGroup } from '../types';
 
 export class AddEnvironmentGroupWebview {
-    private panel: vscode.WebviewPanel | undefined;    constructor(
+    private panel: vscode.WebviewPanel | undefined;
+    private readonly schemaId: string;
+
+    constructor(
+        private readonly context: vscode.ExtensionContext,
         private readonly configManager: ConfigurationManager,
-        private readonly onGroupAdded: () => void
-    ) {}
+        schemaId: string,
+        private readonly onSave: () => void
+    ) {
+        this.schemaId = schemaId;
+    }
 
     async show() {
         // Create and show a new webview panel
@@ -48,10 +56,11 @@ export class AddEnvironmentGroupWebview {
             // Create the group
             const group: SchemaEnvironmentGroup = {
                 id: `group_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-                schemaId: this.schema.id,
+                schemaId: this.schemaId,
                 name: data.name,
                 description: data.description || '',
-                color: data.color || 'blue'
+                color: data.color || 'blue',
+                createdAt: new Date()
             };
 
             // If credentials were provided, store them
@@ -84,7 +93,7 @@ export class AddEnvironmentGroupWebview {
             this.dispose();
 
             // Refresh the tree view
-            this.onGroupAdded();
+            this.onSave();
 
             vscode.window.showInformationMessage(`Environment group "${data.name}" created successfully!`);
 
@@ -451,5 +460,10 @@ export class AddEnvironmentGroupWebview {
     </script>
 </body>
 </html>`;
+    }
+
+    public dispose() {
+        this.panel?.dispose();
+        this.panel = undefined;
     }
 }

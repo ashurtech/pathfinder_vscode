@@ -1,12 +1,19 @@
 import * as vscode from 'vscode';
 import { ConfigurationManager } from '../configuration';
+import { SchemaEnvironment } from '../types';
 
 export class AddEnvironmentWebview {
-    private panel: vscode.WebviewPanel | undefined;    constructor(
+    private panel: vscode.WebviewPanel | undefined;
+    private readonly schemaId: string;
+
+    constructor(
         private readonly context: vscode.ExtensionContext,
         private readonly configManager: ConfigurationManager,
-        private readonly onEnvironmentAdded: () => void
-    ) {}
+        schemaId: string,
+        private readonly onSave: () => void
+    ) {
+        this.schemaId = schemaId;
+    }
 
     async show() {
         // Create and show a new webview panel
@@ -52,11 +59,11 @@ export class AddEnvironmentWebview {
             // Create the environment
             const environment: SchemaEnvironment = {
                 id: `env_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-                schemaId: this.schema.id,
+                schemaId: this.schemaId,
                 name: data.name,
                 baseUrl: data.baseUrl,
                 description: data.description || '',
-                auth: { type: 'none' },
+                auth: data.auth,
                 customHeaders: data.customHeaders || {},
                 timeout: data.timeout || 30000,
                 createdAt: new Date(),
@@ -93,7 +100,7 @@ export class AddEnvironmentWebview {
             this.dispose();
 
             // Refresh the tree view
-            this.onEnvironmentAdded();
+            this.onSave();
 
             vscode.window.showInformationMessage(`Environment "${data.name}" created successfully!`);
 
@@ -573,5 +580,10 @@ export class AddEnvironmentWebview {
     </script>
 </body>
 </html>`;
+    }
+
+    public dispose() {
+        this.panel?.dispose();
+        this.panel = undefined;
     }
 }

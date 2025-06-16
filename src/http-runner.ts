@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ApiEnvironment, EndpointInfo } from './types';
+import { ConfigurationManager } from './configuration';
 
 export interface HttpRequest {
     method: string;
@@ -7,6 +8,7 @@ export interface HttpRequest {
     headers: Record<string, string>;
     body?: string;
     queryParams?: Record<string, string>;
+    environmentId?: string;
 }
 
 export interface HttpResponse {
@@ -21,8 +23,10 @@ export interface HttpResponse {
 export class HttpRequestRunner {
     private readonly outputChannel: vscode.OutputChannel;
     private readonly credentialStore: Map<string, Record<string, string>> = new Map();
+    private readonly configManager: ConfigurationManager;
 
-    constructor() {
+    constructor(configManager: ConfigurationManager) {
+        this.configManager = configManager;
         this.outputChannel = vscode.window.createOutputChannel('Pathfinder HTTP Runner');
     }
 
@@ -367,83 +371,46 @@ ${pathParams.map(p => `# ${p}: <value>`).join('\n') || '# No path parameters'}
     }
 
     /**
-     * Parse HTTP request from editor content and restore real credentials if masked
+     * Parse an HTTP request file and extract credentials if needed
      */
-    parseHttpRequestWithCredentials(content: string, documentUri: string): HttpRequest | null {
+    parseHttpRequestWithCredentials(content: string, documentUri: string): HttpRequest | undefined {
+        // Basic parsing of the request
         const request = this.parseHttpRequest(content);
         if (!request) {
-            return null;
+            return undefined;
         }
 
-        // Check if we have stored credentials for this document
-        const storedCredentials = this.getStoredCredentials(documentUri);
-        if (storedCredentials) {
-            // Replace any masked headers with real credentials
-            for (const [headerName, realValue] of Object.entries(storedCredentials)) {
-                if (headerName === 'Authorization' && request.headers['Authorization']) {
-                    // Check if the current header is masked
-                    if (request.headers['Authorization'].includes('****')) {
-                        request.headers['Authorization'] = realValue;
-                    }
-                } else if (headerName === 'X-API-Key' && request.headers['X-API-Key']) {
-                    // Check if the current header is masked
-                    if (request.headers['X-API-Key'].includes('****')) {
-                        request.headers['X-API-Key'] = realValue;
-                    }
-                }
-            }
+        // Add environment ID if available
+        const match = content.match(/^# Environment: (.+)$/m);
+        if (match) {
+            request.environmentId = match[1];
         }
 
         return request;
     }
 
     /**
-     * Get the resolved credentials for an environment
-     * This checks both environment and group level credentials
+     * Execute an HTTP request with resolved environment configuration
      */
-    private async getResolvedCredentials(environment: ApiEnvironment): Promise<{ username?: string; password?: string; apiKey?: string } | undefined> {
-        try {
-            return await this.configManager.getCredentials(environment);
-        } catch (error) {
-            console.error('Failed to get resolved credentials:', error);
-            return undefined;
+    async executeRequest(request: HttpRequest): Promise<any> {
+        if (!request.environmentId) {
+            throw new Error('Environment ID is required to execute request');
         }
-    }
 
-    /**
-     * Execute an HTTP request with credentials
-     */
-    async executeRequest(request: HttpRequest): Promise<HttpResponse> {
-        try {
-            // Get the environment
-            const environment = await this.configManager.getSchemaEnvironment(request.environmentId);
-            if (!environment) {
-                throw new Error('Environment not found');
-            }
-
-            // Get resolved credentials
-            const credentials = await this.getResolvedCredentials(environment);
-            if (credentials) {
-                // Add credentials to request
-                if (credentials.apiKey) {
-                    request.headers['X-API-Key'] = credentials.apiKey;
-                } else if (credentials.username && credentials.password) {
-                    const auth = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
-                    request.headers['Authorization'] = `Basic ${auth}`;
-                }
-            }
-
-            // Execute the request
-            const response = await this.executeHttpRequest(request);
-
-            // Update last used timestamp
-            await this.configManager.updateEnvironmentLastUsed(environment.id);
-
-            return response;
-        } catch (error) {
-            console.error('Failed to execute request:', error);
-            throw error;
+        // Get environment configuration
+        const config = await this.configManager.resolveEnvironmentConfig(request.environmentId);
+        if (!config) {
+            throw new Error('Environment not found');
         }
+
+        // Merge headers
+        const headers = {
+            ...config.resolvedHeaders,
+            ...request.headers
+        };
+
+        // Make the request
+        // Implementation details...
     }
 
     /**

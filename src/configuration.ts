@@ -10,7 +10,7 @@
  */
 
 import * as vscode from 'vscode';
-import { ExtensionSettings, ApiSchema, SchemaEnvironment, ApiSchemaGroup, ResolvedEnvironmentConfig, ApiEnvironment, ApiEnvironmentGroup, LoadedSchema } from './types';
+import { ExtensionSettings, ApiSchema, SchemaEnvironment, ApiSchemaGroup, ResolvedEnvironmentConfig, ApiEnvironment, ApiEnvironmentGroup, LoadedSchema, SchemaEnvironmentGroup } from './types';
 
 /**
  * Manages configuration and storage for the API Helper extension
@@ -160,8 +160,8 @@ export class ConfigurationManager {
     /**
      * Get schema environment groups for a specific schema
      */
-    async getSchemaEnvironmentGroups(schemaId?: string): Promise<any[]> {
-        const groups = this.context.globalState.get<any[]>('schemaEnvironmentGroups', []);
+    async getSchemaEnvironmentGroups(schemaId?: string): Promise<SchemaEnvironmentGroup[]> {
+        const groups = this.context.globalState.get<SchemaEnvironmentGroup[]>('schemaEnvironmentGroups', []);
         const converted = groups.map(group => ({
             ...group,
             createdAt: new Date(group.createdAt)
@@ -171,12 +171,13 @@ export class ConfigurationManager {
             return converted.filter(group => group.schemaId === schemaId);
         }
         
-        return converted;    }
+        return converted;
+    }
     
     /**
      * Save a schema environment group
      */
-    async saveSchemaEnvironmentGroup(group: any): Promise<void> {
+    async saveSchemaEnvironmentGroup(group: SchemaEnvironmentGroup): Promise<void> {
         const groups = await this.getSchemaEnvironmentGroups();
         const existingIndex = groups.findIndex(g => g.id === group.id);
         
@@ -479,6 +480,19 @@ export class ConfigurationManager {
      */    async updateSetting(key: keyof ExtensionSettings, value: any, target: vscode.ConfigurationTarget = vscode.ConfigurationTarget.Global): Promise<void> {
         const config = vscode.workspace.getConfiguration('pathfinder');
         await config.update(key, value, target);
+    }
+    
+    /**
+     * Update extension settings
+     */
+    async updateExtensionSettings(settings: ExtensionSettings): Promise<void> {
+        const config = vscode.workspace.getConfiguration('pathfinder');
+        await Promise.all([
+            config.update('requestTimeout', settings.requestTimeout, vscode.ConfigurationTarget.Global),
+            config.update('defaultCodeFormat', settings.defaultCodeFormat, vscode.ConfigurationTarget.Global),
+            config.update('autoValidateSchemas', settings.autoValidateSchemas, vscode.ConfigurationTarget.Global),
+            config.update('maxHistoryItems', settings.maxHistoryItems, vscode.ConfigurationTarget.Global)
+        ]);
     }
     
     // ========================

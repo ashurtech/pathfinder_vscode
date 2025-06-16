@@ -32,7 +32,7 @@ import { AddSchemaEnvironmentWebview } from './webviews/add-schema-environment-f
 import { AddSchemaEnvironmentGroupWebview } from './webviews/add-schema-environment-group-form';
 import { AddEnvironmentToGroupWebview } from './webviews/add-environment-to-group-form';
 import { EditEnvironmentWebview } from './webviews/edit-environment-form';
-import { ApiEnvironment, EndpointInfo } from './types';
+import { ApiEnvironment, EndpointInfo, SchemaEnvironment, SchemaEnvironmentGroup } from './types';
 
 // Global instances that will be used throughout the extension
 let configManager: ConfigurationManager;
@@ -50,7 +50,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // Initialize our core services
     configManager = new ConfigurationManager(context);
     schemaLoader = new SchemaLoader();
-    httpRunner = new HttpRequestRunner();
+    httpRunner = new HttpRequestRunner(configManager);
     treeProvider = new ApiTreeProvider(configManager, schemaLoader);
     
     // Register the tree view with drag and drop support
@@ -140,7 +140,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     const addEnvironmentGroupCommand = vscode.commands.registerCommand(
         'pathfinder.addEnvironmentGroup',
-        addEnvironmentGroupHandler
+        () => addEnvironmentGroupHandler(context)
     );
     
     const editGroupCommand = vscode.commands.registerCommand(
@@ -638,9 +638,30 @@ async function addApiEnvironmentHandler(context: vscode.ExtensionContext) {
     try {
         console.log('Opening add environment webview form...');
         
+        // First, let user select a schema
+        const schemas = await configManager.getApiSchemas();
+        if (schemas.length === 0) {
+            vscode.window.showInformationMessage('No schemas available. Please add a schema first.');
+            return;
+        }
+
+        const selectedSchema = await vscode.window.showQuickPick(
+            schemas.map(schema => ({
+                label: schema.name,
+                description: `v${schema.version}`,
+                value: schema
+            })),
+            { placeHolder: 'Select a schema for this environment' }
+        );
+
+        if (!selectedSchema) {
+            return;
+        }
+        
         const addEnvironmentWebview = new AddEnvironmentWebview(
             context,
             configManager,
+            selectedSchema.value.id,
             () => {
                 treeProvider.refresh();
             }
@@ -994,12 +1015,34 @@ async function showStorageStatsHandler() {
 /**
  * Command to add a new environment group
  */
-async function addEnvironmentGroupHandler() {
+async function addEnvironmentGroupHandler(context: vscode.ExtensionContext) {
     try {
         console.log('Opening add environment group webview form...');
         
+        // First, let user select a schema
+        const schemas = await configManager.getApiSchemas();
+        if (schemas.length === 0) {
+            vscode.window.showInformationMessage('No schemas available. Please add a schema first.');
+            return;
+        }
+
+        const selectedSchema = await vscode.window.showQuickPick(
+            schemas.map(schema => ({
+                label: schema.name,
+                description: `v${schema.version}`,
+                value: schema
+            })),
+            { placeHolder: 'Select a schema for this group' }
+        );
+
+        if (!selectedSchema) {
+            return;
+        }
+        
         const addGroupWebview = new AddEnvironmentGroupWebview(
+            context,
             configManager,
+            selectedSchema.value.id,
             () => {
                 treeProvider.refresh();
             }
