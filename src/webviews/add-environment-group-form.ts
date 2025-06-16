@@ -27,7 +27,7 @@ export class AddEnvironmentGroupWebview {
             async (message) => {
                 switch (message.command) {
                     case 'submitForm':
-                        await this.handleFormSubmission(message.data);
+                        await this.handleSubmit(message.data);
                         break;
                     case 'cancel':
                         this.panel?.dispose();
@@ -37,45 +37,60 @@ export class AddEnvironmentGroupWebview {
         );
     }
 
-    private async handleFormSubmission(data: any) {
+    private async handleSubmit(data: any) {
         try {
-            // Show loading state
-            await this.panel?.webview.postMessage({
-                command: 'setLoading',
-                loading: true,
-                message: 'Creating environment group...'
-            });
+            // Validate required fields
+            if (!data.name) {
+                vscode.window.showErrorMessage('Name is required');
+                return;
+            }
 
-            // Create the environment group object
-            const group = {
+            // Create the group
+            const group: SchemaEnvironmentGroup = {
                 id: `group_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
-                name: data.name.trim(),
-                description: data.description?.trim(),
-                color: data.color ?? 'blue',
-                createdAt: new Date()
+                schemaId: this.schema.id,
+                name: data.name,
+                description: data.description || '',
+                color: data.color || 'blue'
             };
 
-            // Save the environment group
-            await this.configManager.saveEnvironmentGroup(group);
+            // If credentials were provided, store them
+            if (data.auth?.type !== 'none') {
+                let credentials: { username?: string; password?: string; apiKey?: string } = {};
+                
+                switch (data.auth.type) {
+                    case 'basic':
+                        credentials = {
+                            username: data.auth.username,
+                            password: data.auth.password
+                        };
+                        break;
+                    case 'apikey':
+                        credentials = {
+                            apiKey: data.auth.apiKey
+                        };
+                        break;
+                }
 
-            // Show success message
-            vscode.window.showInformationMessage(`Environment group "${group.name}" created successfully!`);
+                // Store credentials and get the secret key
+                const secretKey = await this.configManager.setCredentials(group, credentials);
+                group.authSecretKey = secretKey;
+            }
 
-            // Close the webview and refresh
-            this.panel?.dispose();
+            // Save the group
+            await this.configManager.saveSchemaEnvironmentGroup(group);
+
+            // Close the webview
+            this.dispose();
+
+            // Refresh the tree view
             this.onGroupAdded();
 
-        } catch (error) {
-            // Show error state
-            await this.panel?.webview.postMessage({
-                command: 'setLoading',
-                loading: false
-            });
+            vscode.window.showInformationMessage(`Environment group "${data.name}" created successfully!`);
 
-            await this.panel?.webview.postMessage({
-                command: 'showError',
-                error: `Failed to create environment group: ${error}`
-            });
+        } catch (error) {
+            console.error('Failed to create environment group:', error);
+            vscode.window.showErrorMessage(`Failed to create environment group: ${error}`);
         }
     }
 

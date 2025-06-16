@@ -28,7 +28,7 @@ export class AddEnvironmentWebview {
             async (message) => {
                 switch (message.command) {
                     case 'submitForm':
-                        await this.handleFormSubmission(message.data);
+                        await this.handleSubmit(message.data);
                         break;
                     case 'cancel':
                         this.panel?.dispose();
@@ -41,78 +41,65 @@ export class AddEnvironmentWebview {
         );
     }
 
-    private async handleFormSubmission(data: any) {
+    private async handleSubmit(data: any) {
         try {
-            // Show loading state
-            await this.panel?.webview.postMessage({
-                command: 'setLoading',
-                loading: true,
-                message: 'Creating environment...'
-            });
+            // Validate required fields
+            if (!data.name || !data.baseUrl) {
+                vscode.window.showErrorMessage('Name and Base URL are required');
+                return;
+            }
 
-            // Create the environment object
-            const environment = {
-                id: this.configManager.generateEnvironmentId(),
+            // Create the environment
+            const environment: SchemaEnvironment = {
+                id: `env_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+                schemaId: this.schema.id,
                 name: data.name,
                 baseUrl: data.baseUrl,
-                description: data.description ?? undefined,
-                auth: { type: data.authType },
-                createdAt: new Date()
+                description: data.description || '',
+                auth: { type: 'none' },
+                customHeaders: data.customHeaders || {},
+                timeout: data.timeout || 30000,
+                createdAt: new Date(),
+                lastUsed: new Date()
             };
 
-            // Handle authentication configuration
-            const secretPrefix = `env:${environment.id}`;
-            
-            if (data.authType === 'apikey') {
-                if (!data.apiKey) {
-                    throw new Error('API key is required');
+            // If credentials were provided, store them
+            if (data.auth?.type !== 'none') {
+                let credentials: { username?: string; password?: string; apiKey?: string } = {};
+                
+                switch (data.auth.type) {
+                    case 'basic':
+                        credentials = {
+                            username: data.auth.username,
+                            password: data.auth.password
+                        };
+                        break;
+                    case 'apikey':
+                        credentials = {
+                            apiKey: data.auth.apiKey
+                        };
+                        break;
                 }
-                  // Store API key in SecretStorage
-                await this.context.secrets.store(`${secretPrefix}:apiKey`, data.apiKey);
-                (environment.auth as any)["apiKeySecret"] = `${secretPrefix}:apiKey`;
-                (environment.auth as any)["apiKeyLocation"] = data.apiKeyLocation;
-                (environment.auth as any)["apiKeyName"] = data.apiKeyName;
-                
-            } else if (data.authType === 'bearer') {
-                if (!data.bearerToken) {
-                    throw new Error('Bearer token is required');
-                }
-                
-                // Store bearer token in SecretStorage
-                await this.context.secrets.store(`${secretPrefix}:bearerToken`, data.bearerToken);
-                (environment.auth as any)["bearerTokenSecret"] = `${secretPrefix}:bearerToken`;
-                
-            } else if (data.authType === 'basic') {
-                if (!data.username || !data.password) {
-                    throw new Error('Username and password are required');
-                }
-                
-                (environment.auth as any)["username"] = data.username;
-                await this.context.secrets.store(`${secretPrefix}:password`, data.password);
-                (environment.auth as any)["passwordSecret"] = `${secretPrefix}:password`;
+
+                // Store credentials and get the secret key
+                const secretKey = await this.configManager.setCredentials(environment, credentials);
+                environment.authSecretKey = secretKey;
             }
 
             // Save the environment
-            await this.configManager.saveApiEnvironment(environment);
+            await this.configManager.saveSchemaEnvironment(environment);
 
-            // Show success message
-            vscode.window.showInformationMessage(`✅ Environment "${data.name}" has been saved!`);
+            // Close the webview
+            this.dispose();
 
-            // Close the webview and refresh
-            this.panel?.dispose();
+            // Refresh the tree view
             this.onEnvironmentAdded();
 
-        } catch (error) {
-            // Show error state
-            await this.panel?.webview.postMessage({
-                command: 'setLoading',
-                loading: false
-            });
+            vscode.window.showInformationMessage(`Environment "${data.name}" created successfully!`);
 
-            await this.panel?.webview.postMessage({
-                command: 'showError',
-                error: `Failed to create environment: ${error}`
-            });
+        } catch (error) {
+            console.error('Failed to create environment:', error);
+            vscode.window.showErrorMessage(`Failed to create environment: ${error}`);
         }
     }
 

@@ -281,6 +281,13 @@
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "pathfinderExplorer",
+        "contents": "Welcome to Pathfinder! 🚀\n\nGet started by [adding an API environment](command:pathfinder.addEnvironment) or [loading a schema](command:pathfinder.addApiSchema).",
+        "when": "!pathfinder.hasUserData"
+      }
+    ],
     "menus": {
       "view/title": [
         {

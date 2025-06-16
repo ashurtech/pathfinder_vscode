@@ -410,6 +410,12 @@ export interface SchemaEnvironment {
     
     /** Optional environment group membership within a schema */
     environmentGroupId?: string;
+    
+    /**
+     * Reference to a secret key in VS Code SecretStorage for credentials (API key or password)
+     * If present, this environment uses this secret for authentication
+     */
+    authSecretKey?: string;
 }
 
 /**
@@ -434,6 +440,12 @@ export interface SchemaEnvironmentGroup {
     
     /** Color/icon theme for visual distinction */
     color?: 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow';
+    
+    /**
+     * Reference to a secret key in VS Code SecretStorage for credentials (API key or password)
+     * If present, this group provides default credentials for its environments
+     */
+    authSecretKey?: string;
 }
 
 /**

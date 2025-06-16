@@ -78,6 +78,9 @@ export async function activate(context: vscode.ExtensionContext) {
     
     // Force migration to schema-first architecture (auto-migrate)
     await forceSchemaFirstMigration();
+
+    // Set the welcome context key
+    await updateWelcomeContext();
     
     console.log('✅ Pathfinder - OpenAPI Explorer is now active!');
 }
@@ -188,6 +191,7 @@ function registerCommands(context: vscode.ExtensionContext) {
         async () => {
             await configManager.clearAllData();
             treeProvider.refresh();
+            await updateWelcomeContext();
             vscode.window.showInformationMessage('Pathfinder session has been reset to defaults.');
         }
     );
@@ -247,6 +251,7 @@ function registerCommands(context: vscode.ExtensionContext) {
             }
 
             treeProvider.refresh();
+            await updateWelcomeContext();
             const reload = await vscode.window.showInformationMessage(
                 'Pathfinder has been factory reset. All user data and settings have been removed. Reload window now?',
                 'Reload Window', 'Later'
@@ -350,6 +355,132 @@ function registerCommands(context: vscode.ExtensionContext) {
         (group: any) => renameGroupHandler(group)
     );
     
+    // ========================
+    // Configuration Import/Export Commands
+    // ========================
+    
+    const exportConfigurationCommand = vscode.commands.registerCommand(
+        'pathfinder.exportConfiguration',
+        async () => {
+            try {
+                // Get the configuration data
+                const configData = await configManager.exportConfiguration();
+                
+                // Ask user where to save the file
+                const fileUri = await vscode.window.showSaveDialog({
+                    filters: {
+                        'JSON': ['json']
+                    },
+                    title: 'Export Pathfinder Configuration'
+                });
+                
+                if (!fileUri) {
+                    return; // User cancelled
+                }
+                
+                // Write the file
+                await vscode.workspace.fs.writeFile(
+                    fileUri,
+                    Buffer.from(configData, 'utf8')
+                );
+                
+                vscode.window.showInformationMessage(
+                    `Configuration exported successfully to ${fileUri.fsPath}`
+                );
+                
+            } catch (error) {
+                console.error('Failed to export configuration:', error);
+                vscode.window.showErrorMessage(
+                    `Failed to export configuration: ${error}`
+                );
+            }
+        }
+    );
+    
+    const importConfigurationCommand = vscode.commands.registerCommand(
+        'pathfinder.importConfiguration',
+        async () => {
+            try {
+                // Ask user to select a file
+                const fileUris = await vscode.window.showOpenDialog({
+                    canSelectFiles: true,
+                    canSelectFolders: false,
+                    canSelectMany: false,
+                    filters: {
+                        'JSON': ['json']
+                    },
+                    title: 'Import Pathfinder Configuration'
+                });
+                
+                if (!fileUris || fileUris.length === 0) {
+                    return; // User cancelled
+                }
+                
+                // Read the file
+                const fileData = await vscode.workspace.fs.readFile(fileUris[0]);
+                const configData = Buffer.from(fileData).toString('utf8');
+                
+                // Confirm with user
+                const confirm = await vscode.window.showWarningMessage(
+                    'This will merge the imported configuration with your existing settings. Continue?',
+                    { modal: true },
+                    'Import'
+                );
+                
+                if (confirm !== 'Import') {
+                    return;
+                }
+                
+                // Import the configuration
+                const importedData = await configManager.importConfiguration(configData);
+                
+                // Refresh the tree view
+                treeProvider.refresh();
+                await updateWelcomeContext();
+                
+                // Check if we need to set credentials
+                const needsCredentials = [
+                    ...importedData.environments.filter((env: any) => env.auth?.type !== 'none'),
+                    ...importedData.environmentGroups.filter((group: any) => group.auth?.type !== 'none')
+                ];
+
+                if (needsCredentials.length > 0) {
+                    const setCredentials = await vscode.window.showInformationMessage(
+                        'Some environments and groups need credentials set. Would you like to set them now?',
+                        'Set Credentials',
+                        'Later'
+                    );
+
+                    if (setCredentials === 'Set Credentials') {
+                        // Import the CredentialForm
+                        const { CredentialForm } = await import('./webviews/credential-form.js');
+
+                        // Set credentials for each item that needs them
+                        for (const item of needsCredentials) {
+                            const credentialForm = new CredentialForm(
+                                context,
+                                configManager,
+                                item,
+                                () => treeProvider.refresh()
+                            );
+                            await credentialForm.show();
+                        }
+                    }
+                }
+                
+                vscode.window.showInformationMessage(
+                    'Configuration imported successfully'
+                );
+                
+            } catch (error) {
+                console.error('Failed to import configuration:', error);
+                vscode.window.showErrorMessage(
+                    `Failed to import configuration: ${error}`
+                );
+            }
+        }
+    );
+
     // Add all commands to the context so they get cleaned up when the extension deactivates
     context.subscriptions.push(
         helloWorldCommand,
@@ -383,7 +514,9 @@ function registerCommands(context: vscode.ExtensionContext) {
         migrateToSchemaFirstCommand,
         renameSchemaCommand,
         renameEnvironmentCommand,
-        renameGroupCommand
+        renameGroupCommand,
+        exportConfigurationCommand,
+        importConfigurationCommand
     );
 }
 
@@ -514,6 +647,7 @@ async function addApiEnvironmentHandler(context: vscode.ExtensionContext) {
         );
         
         await addEnvironmentWebview.show();
+        await updateWelcomeContext();
         
     } catch (error) {
         console.error('Failed to open add environment form:', error);
@@ -563,8 +697,6 @@ async function listApiEnvironmentsHandler() {
         vscode.window.showErrorMessage(`Failed to list environments: ${error}`);
     }
 }
-
-
 
 /**
  * Command to load a schema from a URL
@@ -635,6 +767,7 @@ async function loadSchemaFromUrlHandler(environment?: ApiEnvironment) {
             
             // Refresh tree view to show new schema
             treeProvider.refresh();
+            await updateWelcomeContext();
             
             if (loadedSchema.isValid) {
                 const info = schemaLoader.getSchemaInfo(loadedSchema.schema);
@@ -740,6 +873,7 @@ async function loadSchemaFromFileHandler(environment?: ApiEnvironment) {
             
             // Refresh tree view to show new schema
             treeProvider.refresh();
+            await updateWelcomeContext();
             
             if (loadedSchema.isValid) {
                 const info = schemaLoader.getSchemaInfo(loadedSchema.schema);
@@ -872,6 +1006,7 @@ async function addEnvironmentGroupHandler() {
         );
         
         await addGroupWebview.show();
+        await updateWelcomeContext();
         
     } catch (error) {
         console.error('Failed to open add environment group form:', error);
@@ -898,26 +1033,13 @@ async function editGroupHandler(group: any, context: vscode.ExtensionContext) {
         );
         
         await editEnvironmentGroupWebview.show();
+        await updateWelcomeContext();
         
     } catch (error) {
         console.error('Failed to open edit environment group form:', error);
         vscode.window.showErrorMessage(`Failed to open edit environment group form: ${error}`);
     }
 }
-
-
-
-/**
- * Command to add an environment to a group
- 
-
-
-
-
-
-
-
-
 
 /**
  * Ensure all required secrets for an environment are present in SecretStorage.
@@ -1070,6 +1192,7 @@ async function addApiSchemaHandler(context: vscode.ExtensionContext) {
         );
         
         await addSchemaWebview.show();
+        await updateWelcomeContext();
         
     } catch (error) {
         console.error('Failed to open add schema form:', error);
@@ -1174,6 +1297,7 @@ async function loadNewSchemaHandler(name?: string, description?: string) {
         
         await configManager.saveApiSchema(newSchema);
         treeProvider.refresh();
+        await updateWelcomeContext();
         
         vscode.window.showInformationMessage(`Schema "${name}" loaded successfully!`);
         
@@ -1211,6 +1335,7 @@ async function editSchemaGroupHandler(group: any) {
         
         await configManager.saveApiSchemaGroup(updatedGroup);
         treeProvider.refresh();
+        await updateWelcomeContext();
         
         vscode.window.showInformationMessage(`Environment group "${name}" updated successfully!`);
         
@@ -1238,6 +1363,7 @@ async function addSchemaEnvironmentGroupHandler(schema: any, context: vscode.Ext
         );
         
         await addSchemaEnvironmentGroupWebview.show();
+        await updateWelcomeContext();
         
     } catch (error) {
         console.error('Failed to open add schema environment group form:', error);
@@ -1265,6 +1391,7 @@ async function addEnvironmentToGroupHandler2(group: any, schema: any, context: v
         );
         
         await addEnvironmentToGroupWebview.show();
+        await updateWelcomeContext();
         
     } catch (error) {
         console.error('Failed to open add environment to group form:', error);
@@ -1291,6 +1418,7 @@ async function editEnvironmentGroupHandler(group: any, context: vscode.Extension
         );
         
         await editEnvironmentGroupWebview.show();
+        await updateWelcomeContext();
         
     } catch (error) {
         console.error('Failed to open edit environment group form:', error);
@@ -1334,6 +1462,7 @@ async function addSchemaToGroupHandler(group: any) {
         
         await configManager.saveApiSchema(updatedSchema);
         treeProvider.refresh();
+        await updateWelcomeContext();
         
         vscode.window.showInformationMessage(`Schema "${selectedSchema.label}" added to group "${group.name}"!`);
         
@@ -1408,6 +1537,7 @@ async function addEnvironmentHandler() {
         
         await configManager.saveSchemaEnvironment(newEnvironment);
         treeProvider.refresh();
+        await updateWelcomeContext();
         
         vscode.window.showInformationMessage(`Environment "${name}" created successfully!`);
         
@@ -1441,6 +1571,7 @@ async function migrateToSchemaFirstHandler() {
         if (result.success) {
             await configManager.setMigrationComplete();
             treeProvider.refresh();
+            await updateWelcomeContext();
             
             vscode.window.showInformationMessage(
                 `Migration completed! ${result.schemasCreated} schemas and ${result.environmentsMigrated} environments migrated.`
@@ -1550,6 +1681,7 @@ async function renameSchemaHandler(schemaOrTreeItem: any) {
 
         await configManager.saveApiSchema(updatedSchema);
         treeProvider.refresh();
+        await updateWelcomeContext();
 
         vscode.window.showInformationMessage(`Schema renamed to "${newName}"`);
 
@@ -1578,6 +1710,7 @@ async function editSchemaHandler(schema: any, context: vscode.ExtensionContext) 
         );
         
         await editSchemaWebview.show();
+        await updateWelcomeContext();
         
     } catch (error) {
         console.error('Failed to open edit schema form:', error);
@@ -1604,6 +1737,7 @@ async function addEnvironmentForSchemaHandler(schema: any, context: vscode.Exten
         );
         
         await addSchemaEnvironmentWebview.show();
+        await updateWelcomeContext();
         
     } catch (error) {
         console.error('Failed to open add schema environment form:', error);
@@ -1653,6 +1787,7 @@ async function deleteSchemaHandler(schemaOrTreeItem: any) {
             await configManager.deleteApiSchema(schema.id);
             
             treeProvider.refresh();
+            await updateWelcomeContext();
             vscode.window.showInformationMessage(`Schema "${schema.name}" and all related data deleted successfully.`);
         }
         
@@ -1689,6 +1824,7 @@ async function deleteSchemaEnvironmentHandler(environmentOrTreeItem: any) {
         if (confirm === 'Delete Environment') {
             await configManager.deleteSchemaEnvironment(environment.id);
             treeProvider.refresh();
+            await updateWelcomeContext();
             vscode.window.showInformationMessage(`Environment "${environment.name}" deleted successfully.`);
         }
         
@@ -1736,6 +1872,7 @@ async function deleteSchemaEnvironmentGroupHandler(groupOrTreeItem: any) {
             await configManager.deleteSchemaEnvironmentGroup(group.id);
             
             treeProvider.refresh();
+            await updateWelcomeContext();
             vscode.window.showInformationMessage(`Environment group "${group.name}" and ${groupEnvironments.length} environment(s) deleted successfully.`);
         }
         
@@ -1772,6 +1909,7 @@ async function changeSchemaColorHandler(schema: any) {
 
             await configManager.saveApiSchema(updatedSchema);
             treeProvider.refresh();
+            await updateWelcomeContext();
 
             vscode.window.showInformationMessage(`Schema color changed to ${selectedColor.label}`);
         }
@@ -1808,6 +1946,7 @@ async function changeEnvironmentGroupColorHandler(group: any) {
 
             await configManager.saveSchemaEnvironmentGroup(updatedGroup);
             treeProvider.refresh();
+            await updateWelcomeContext();
 
             vscode.window.showInformationMessage(`Environment group color changed to ${selectedColor.label}`);
         }
@@ -1836,6 +1975,7 @@ async function editEnvironmentHandler(environment: ApiEnvironment, context: vsco
         );
         
         await editEnvironmentWebview.show();
+        await updateWelcomeContext();
         
     } catch (error) {
         console.error('Failed to open edit environment form:', error);
@@ -1892,6 +2032,7 @@ async function renameEnvironmentHandler(environmentOrTreeItem: any) {
         }
 
         treeProvider.refresh();
+        await updateWelcomeContext();
 
         vscode.window.showInformationMessage(`Environment renamed to "${newName}"`);
 
@@ -1949,6 +2090,7 @@ async function renameGroupHandler(groupOrTreeItem: any) {
         }
 
         treeProvider.refresh();
+        await updateWelcomeContext();
 
         vscode.window.showInformationMessage(`Group renamed to "${newName}"`);
 
@@ -1963,4 +2105,12 @@ async function renameGroupHandler(groupOrTreeItem: any) {
  */
 export function deactivate() {
     console.log('👋 Pathfinder - OpenAPI Explorer is shutting down');
+}
+
+// Utility to update the welcome context key
+async function updateWelcomeContext() {
+    const envs = await configManager.getApiEnvironments();
+    const schemas = await (configManager.getApiSchemas?.() || []);
+    const hasUserData = (envs && envs.length > 0) || (schemas && schemas.length > 0);
+    await vscode.commands.executeCommand('setContext', 'pathfinder.hasUserData', hasUserData);
 }

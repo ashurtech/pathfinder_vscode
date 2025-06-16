@@ -540,4 +540,209 @@ export class ConfigurationManager {
     async deleteSecret(key: string): Promise<void> {
         await this.context.secrets.delete(key);
     }
+
+    /**
+     * Get credentials for an environment, checking both environment and group level
+     * Returns undefined if no credentials are found
+     */
+    async getCredentials(environment: SchemaEnvironment): Promise<{ username?: string; password?: string; apiKey?: string } | undefined> {
+        try {
+            // First check environment's own credentials
+            if (environment.authSecretKey) {
+                const secret = await this.context.secrets.get(environment.authSecretKey);
+                if (secret) {
+                    return JSON.parse(secret);
+                }
+            }
+
+            // If no environment credentials, check group credentials
+            if (environment.environmentGroupId) {
+                const groups = await this.getSchemaEnvironmentGroups();
+                const group = groups.find(g => g.id === environment.environmentGroupId);
+                
+                if (group?.authSecretKey) {
+                    const secret = await this.context.secrets.get(group.authSecretKey);
+                    if (secret) {
+                        return JSON.parse(secret);
+                    }
+                }
+            }
+
+            return undefined;
+        } catch (error) {
+            console.error('Failed to get credentials:', error);
+            throw new Error(`Failed to get credentials: ${error}`);
+        }
+    }
+
+    /**
+     * Set credentials for an environment or group
+     * @param target The environment or group to set credentials for
+     * @param credentials The credentials to store
+     * @returns The secret key that was generated
+     */
+    async setCredentials(
+        target: SchemaEnvironment | SchemaEnvironmentGroup,
+        credentials: { username?: string; password?: string; apiKey?: string }
+    ): Promise<string> {
+        try {
+            // Generate a unique key for this secret
+            const secretKey = `pathfinder_${target.id}_${Date.now()}`;
+
+            // Store the credentials in VS Code's secret storage
+            await this.context.secrets.store(secretKey, JSON.stringify(credentials));
+
+            // If there was a previous secret key, delete it
+            if (target.authSecretKey) {
+                await this.context.secrets.delete(target.authSecretKey);
+            }
+
+            return secretKey;
+        } catch (error) {
+            console.error('Failed to set credentials:', error);
+            throw new Error(`Failed to set credentials: ${error}`);
+        }
+    }
+
+    /**
+     * Delete credentials for an environment or group
+     */
+    async deleteCredentials(target: SchemaEnvironment | SchemaEnvironmentGroup): Promise<void> {
+        try {
+            if (target.authSecretKey) {
+                await this.context.secrets.delete(target.authSecretKey);
+            }
+        } catch (error) {
+            console.error('Failed to delete credentials:', error);
+            throw new Error(`Failed to delete credentials: ${error}`);
+        }
+    }
+
+    /**
+     * Update the export data to remove any sensitive information
+     * This ensures secrets are never included in exports
+     */
+    private sanitizeExportData(data: any): any {
+        const sanitized = { ...data };
+
+        // Remove authSecretKey from environments
+        if (Array.isArray(sanitized.environments)) {
+            sanitized.environments = sanitized.environments.map((env: any) => {
+                const { authSecretKey, ...rest } = env;
+                return rest;
+            });
+        }
+
+        // Remove authSecretKey from environment groups
+        if (Array.isArray(sanitized.environmentGroups)) {
+            sanitized.environmentGroups = sanitized.environmentGroups.map((group: any) => {
+                const { authSecretKey, ...rest } = group;
+                return rest;
+            });
+        }
+
+        return sanitized;
+    }
+
+    /**
+     * Export all configuration data to a JSON file
+     * This includes schemas, environments, groups, and settings
+     */
+    async exportConfiguration(): Promise<string> {
+        try {
+            // Gather all data
+            const schemas = await this.getApiSchemas();
+            const environments = await this.getSchemaEnvironments();
+            const schemaGroups = await this.getApiSchemaGroups();
+            const environmentGroups = await this.getSchemaEnvironmentGroups();
+            const settings = this.getExtensionSettings();
+
+            // Create export object
+            const exportData = {
+                version: '1.0',
+                timestamp: new Date().toISOString(),
+                schemas,
+                environments,
+                schemaGroups,
+                environmentGroups,
+                settings
+            };
+
+            // Sanitize the data to remove sensitive information
+            const sanitizedData = this.sanitizeExportData(exportData);
+
+            // Convert to JSON with pretty formatting
+            return JSON.stringify(sanitizedData, null, 2);
+        } catch (error) {
+            console.error('Failed to export configuration:', error);
+            throw new Error(`Failed to export configuration: ${error}`);
+        }
+    }
+
+    /**
+     * Import configuration from a JSON file
+     * This will merge the imported data with existing data
+     */
+    async importConfiguration(jsonData: string): Promise<{
+        environments: SchemaEnvironment[];
+        environmentGroups: SchemaEnvironmentGroup[];
+    }> {
+        try {
+            // Parse the JSON data
+            const data = JSON.parse(jsonData);
+
+            // Validate version
+            if (!data.version) {
+                throw new Error('Invalid configuration file: missing version');
+            }
+
+            // Import schemas
+            if (Array.isArray(data.schemas)) {
+                for (const schema of data.schemas) {
+                    // Convert date strings back to Date objects
+                    schema.loadedAt = new Date(schema.loadedAt);
+                    schema.lastUpdated = new Date(schema.lastUpdated);
+                    await this.saveApiSchema(schema);
+                }
+            }
+
+            // Import environments
+            if (Array.isArray(data.environments)) {
+                for (const environment of data.environments) {
+                    // Convert date strings back to Date objects
+                    environment.createdAt = new Date(environment.createdAt);
+                    environment.lastUsed = environment.lastUsed ? new Date(environment.lastUsed) : undefined;
+                    await this.saveSchemaEnvironment(environment);
+                }
+            }
+
+            // Import schema groups
+            if (Array.isArray(data.schemaGroups)) {
+                for (const group of data.schemaGroups) {
+                    await this.saveApiSchemaGroup(group);
+                }
+            }
+
+            // Import environment groups
+            if (Array.isArray(data.environmentGroups)) {
+                for (const group of data.environmentGroups) {
+                    await this.saveSchemaEnvironmentGroup(group);
+                }
+            }
+
+            // Import settings
+            if (data.settings) {
+                await this.updateExtensionSettings(data.settings);
+            }
+
+            return {
+                environments: data.environments || [],
+                environmentGroups: data.environmentGroups || []
+            };
+
+        } catch (error) {
+            console.error('Failed to import configuration:', error);
+            throw new Error(`Failed to import configuration: ${error}`);
+        }
+    }
 }

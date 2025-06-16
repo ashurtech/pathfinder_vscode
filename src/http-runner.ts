@@ -398,70 +398,51 @@ ${pathParams.map(p => `# ${p}: <value>`).join('\n') || '# No path parameters'}
     }
 
     /**
-     * Execute HTTP request
+     * Get the resolved credentials for an environment
+     * This checks both environment and group level credentials
+     */
+    private async getResolvedCredentials(environment: ApiEnvironment): Promise<{ username?: string; password?: string; apiKey?: string } | undefined> {
+        try {
+            return await this.configManager.getCredentials(environment);
+        } catch (error) {
+            console.error('Failed to get resolved credentials:', error);
+            return undefined;
+        }
+    }
+
+    /**
+     * Execute an HTTP request with credentials
      */
     async executeRequest(request: HttpRequest): Promise<HttpResponse> {
-        const startTime = Date.now();
-        
         try {
-            this.outputChannel.appendLine(`Executing ${request.method} ${request.url}`);
-            
-            // Build fetch options
-            const fetchOptions: RequestInit = {
-                method: request.method,
-                headers: request.headers
-            };
-
-            // Add body for non-GET requests
-            if (request.body && !['GET', 'HEAD'].includes(request.method)) {
-                fetchOptions.body = request.body;
+            // Get the environment
+            const environment = await this.configManager.getSchemaEnvironment(request.environmentId);
+            if (!environment) {
+                throw new Error('Environment not found');
             }
 
-            // Build final URL with query parameters
-            let finalUrl = request.url;
-            if (request.queryParams) {
-                const params = new URLSearchParams(request.queryParams);
-                finalUrl += `?${params.toString()}`;
+            // Get resolved credentials
+            const credentials = await this.getResolvedCredentials(environment);
+            if (credentials) {
+                // Add credentials to request
+                if (credentials.apiKey) {
+                    request.headers['X-API-Key'] = credentials.apiKey;
+                } else if (credentials.username && credentials.password) {
+                    const auth = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
+                    request.headers['Authorization'] = `Basic ${auth}`;
+                }
             }
 
-            // Execute request
-            const response = await fetch(finalUrl, fetchOptions);
-            const responseBody = await response.text();
-            const endTime = Date.now();
+            // Execute the request
+            const response = await this.executeHttpRequest(request);
 
-            // Convert headers to object
-            const responseHeaders: Record<string, string> = {};
-            response.headers.forEach((value, key) => {
-                responseHeaders[key] = value;
-            });
+            // Update last used timestamp
+            await this.configManager.updateEnvironmentLastUsed(environment.id);
 
-            const httpResponse: HttpResponse = {
-                status: response.status,
-                statusText: response.statusText,
-                headers: responseHeaders,
-                body: responseBody,
-                responseTime: endTime - startTime,
-                size: new Blob([responseBody]).size
-            };
-
-            this.outputChannel.appendLine(`Response: ${response.status} ${response.statusText} (${httpResponse.responseTime}ms)`);
-            
-            return httpResponse;
-
+            return response;
         } catch (error) {
-            const endTime = Date.now();
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            
-            this.outputChannel.appendLine(`Request failed: ${errorMessage}`);
-            
-            return {
-                status: 0,
-                statusText: 'Request Failed',
-                headers: {},
-                body: `Error: ${errorMessage}`,
-                responseTime: endTime - startTime,
-                size: 0
-            };
+            console.error('Failed to execute request:', error);
+            throw error;
         }
     }
 
