@@ -321,7 +321,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 // Add tagged endpoint groups
                 for (const [tagName, taggedEndpoints] of tagGroups.entries()) {
                     if (tagName !== 'untagged') {
-                        children.push(new TagTreeItem(tagName, taggedEndpoints, envItem.schemaItem));
+                        children.push(new TagTreeItem(tagName, taggedEndpoints, envItem.schemaItem, envItem.environment));
                     }
                 }
                 
@@ -364,7 +364,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 'info',
                 [endpoint, { schema: schemaItem.schema, environment }]
             ),
-            new GenerateCommandsFolderTreeItem(endpoint, { schema: schemaItem.schema, environment }),
+            new GenerateCommandsFolderTreeItem(endpoint, schemaItem, environment),
             new EndpointActionTreeItem(
                 '🚀 Run HTTP Request',
                 'Open HTTP request editor for this endpoint',
@@ -571,17 +571,17 @@ class EndpointActionTreeItem extends TreeItem {
 }
 
 /**
- * Tree item representing a folder that contains all the generate commands
+ * Tree item representing a folder of code generation commands
  */
 class GenerateCommandsFolderTreeItem extends TreeItem {
     constructor(
         public readonly endpoint: ApiEndpoint,
-        public readonly schemaItem: ApiSchemaTreeItem
+        public readonly schemaItem: ApiSchemaTreeItem,
+        public readonly environment: SchemaEnvironment
     ) {
         super('Generate commands >', vscode.TreeItemCollapsibleState.Collapsed);
-        
-        this.iconPath = new vscode.ThemeIcon('folder');
-        this.tooltip = 'Code generation commands for this endpoint';
+        this.iconPath = new vscode.ThemeIcon('symbol-method');
+        this.tooltip = 'Generate code for this endpoint';
         this.contextValue = 'generateCommandsFolder';
     }
 }
