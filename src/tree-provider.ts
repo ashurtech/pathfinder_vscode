@@ -117,13 +117,13 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
         // If target is a group, add environments to it
         if (target instanceof SchemaEnvironmentGroupTreeItem) {
             for (const env of environments) {
-                env.environment.groupId = target.group.id;
+                env.environment.environmentGroupId = target.group.id;
                 await this.configManager.saveSchemaEnvironment(env.environment);
             }
         } else {
             // If dropped at root level, remove from group
             for (const env of environments) {
-                env.environment.groupId = undefined;
+                env.environment.environmentGroupId = undefined;
                 await this.configManager.saveSchemaEnvironment(env.environment);
             }
         }
