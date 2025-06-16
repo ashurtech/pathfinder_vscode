@@ -362,7 +362,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 'Show complete endpoint information',
                 'pathfinder.showEndpointDetails',
                 'info',
-                [endpoint, { schema: schemaItem.schema, environment }]
+                [endpoint, schemaItem, environment]
             ),
             new GenerateCommandsFolderTreeItem(endpoint, schemaItem, environment),
             new EndpointActionTreeItem(
@@ -370,7 +370,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 'Open HTTP request editor for this endpoint',
                 'pathfinder.runHttpRequest',
                 'play',
-                [endpoint, { schema: schemaItem.schema, environment }]
+                [endpoint, schemaItem, environment]
             )
         ];
     }

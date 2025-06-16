@@ -585,7 +585,7 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
     
     const runHttpRequestCmd = vscode.commands.registerCommand(
         'pathfinder.runHttpRequest',
-        (endpoint: any, schemaItem: any) => runHttpRequestCommand(endpoint, schemaItem, context)
+        (endpoint: any, schemaItem: any, environment: any, context: vscode.ExtensionContext) => runHttpRequestCommand(endpoint, schemaItem, environment, context)
     );
     
     const executeHttpRequestCmd = vscode.commands.registerCommand(
@@ -1140,10 +1140,8 @@ async function ensureEnvironmentSecrets(context: vscode.ExtensionContext, enviro
 /**
  * Command to run HTTP request from endpoint
  */
-async function runHttpRequestCommand(endpoint: any, schemaItem: any, context: vscode.ExtensionContext) {
+async function runHttpRequestCommand(endpoint: any, schemaItem: any, environment: any, context: vscode.ExtensionContext) {
     try {
-        // Get the environment directly from the schemaItem
-        const environment = schemaItem.environment;
         if (!environment) {
             vscode.window.showErrorMessage('Environment not found');
             return;

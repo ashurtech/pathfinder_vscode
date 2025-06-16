@@ -253,53 +253,70 @@ export async function showEndpointDetailsCommand(endpoint: ApiEndpoint, schemaIt
  * Generate code for an endpoint with support for different formats
  */
 export async function generateCodeForEndpointCommand(endpoint: ApiEndpoint, schemaItem: any, format: string = 'curl') {
-    const environment = schemaItem.environment;
-    const schema = schemaItem.schema;
-    const platformConfig = getPlatformConfig(schema, environment);
-    
-    let generatedCode: string;
-    let language: string;
-    let title: string;
-    
-    switch (format.toLowerCase()) {
-        case 'curl':
-            generatedCode = generateCurlCommand(endpoint, environment, platformConfig);
-            language = 'shellscript';
-            title = 'cURL Command';
-            break;
-        case 'ansible':
-            generatedCode = generateAnsibleTask(endpoint, environment, platformConfig);
-            language = 'yaml';
-            title = 'Ansible Task';
-            break;
-        case 'powershell':
-            generatedCode = generatePowerShellScript(endpoint, environment, platformConfig);
-            language = 'powershell';
-            title = 'PowerShell Script';
-            break;
-        case 'python':
-            generatedCode = generatePythonCode(endpoint, environment, platformConfig);
-            language = 'python';
-            title = 'Python Code';
-            break;
-        case 'javascript':
-            generatedCode = generateJavaScriptCode(endpoint, environment, platformConfig);
-            language = 'javascript';
-            title = 'JavaScript Code';
-            break;
-        default:
-            generatedCode = generateCurlCommand(endpoint, environment, platformConfig);
-            language = 'shellscript';
-            title = 'cURL Command';
-            break;
+    try {
+        // Get environment from schemaItem
+        const environment = schemaItem.environment;
+        if (!environment) {
+            vscode.window.showErrorMessage('No environment found for this endpoint. Please add an environment first.');
+            return;
+        }
+
+        // Ensure environment has a baseUrl
+        if (!environment.baseUrl) {
+            vscode.window.showErrorMessage('Environment is missing a base URL. Please edit the environment to add a base URL.');
+            return;
+        }
+
+        const schema = schemaItem.schema;
+        const platformConfig = getPlatformConfig(schema, environment);
+        
+        let generatedCode: string;
+        let language: string;
+        let title: string;
+        
+        switch (format.toLowerCase()) {
+            case 'curl':
+                generatedCode = generateCurlCommand(endpoint, environment, platformConfig);
+                language = 'shellscript';
+                title = 'cURL Command';
+                break;
+            case 'ansible':
+                generatedCode = generateAnsibleTask(endpoint, environment, platformConfig);
+                language = 'yaml';
+                title = 'Ansible Task';
+                break;
+            case 'powershell':
+                generatedCode = generatePowerShellScript(endpoint, environment, platformConfig);
+                language = 'powershell';
+                title = 'PowerShell Script';
+                break;
+            case 'python':
+                generatedCode = generatePythonCode(endpoint, environment, platformConfig);
+                language = 'python';
+                title = 'Python Code';
+                break;
+            case 'javascript':
+                generatedCode = generateJavaScriptCode(endpoint, environment, platformConfig);
+                language = 'javascript';
+                title = 'JavaScript Code';
+                break;
+            default:
+                generatedCode = generateCurlCommand(endpoint, environment, platformConfig);
+                language = 'shellscript';
+                title = 'cURL Command';
+                break;
+        }
+        
+        const doc = await vscode.workspace.openTextDocument({
+            content: `# ${title} for ${endpoint.method} ${endpoint.path}\n\n${generatedCode}`,
+            language: language
+        });
+        
+        await vscode.window.showTextDocument(doc);
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(`Failed to generate code: ${errorMessage}`);
     }
-    
-    const doc = await vscode.workspace.openTextDocument({
-        content: `# ${title} for ${endpoint.method} ${endpoint.path}\n\n${generatedCode}`,
-        language: language
-    });
-    
-    await vscode.window.showTextDocument(doc);
 }
 
 /**

@@ -236,6 +236,10 @@
         "command": "pathfinder.factoryReset",
         "title": "Factory Reset (Remove All User Data)",
         "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.clearRequestHistory",
+        "title": "Clear Request History"
       }
     ],
     "configuration": {
@@ -278,6 +282,10 @@
           "id": "pathfinderExplorer",
           "name": "Pathfinder - api explorer",
           "when": "true"
+        },
+        {
+          "id": "pathfinderRequestHistory",
+          "name": "Request History"
         }
       ]
     },
@@ -309,6 +317,11 @@
           "command": "pathfinder.importConfiguration",
           "when": "view == pathfinderExplorer",
           "group": "navigation@4"
+        },
+        {
+          "command": "pathfinder.clearRequestHistory",
+          "when": "view == pathfinderRequestHistory",
+          "group": "navigation"
         }
       ],
       "view/item/context": [
