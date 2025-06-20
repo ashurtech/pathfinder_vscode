@@ -126,7 +126,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     const editEnvironmentCmd = vscode.commands.registerCommand(
         'pathfinder.editEnvironment',
-        (environment: ApiEnvironment) => editEnvironmentHandler(environment, context)
+        (environment: SchemaEnvironment) => editEnvironmentHandler(environment, context)
     );
     
     const duplicateEnvironmentCmd = vscode.commands.registerCommand(
@@ -2000,7 +2000,7 @@ async function changeEnvironmentGroupColorHandler(group: any) {
 /**
  * Command to edit an environment using webview form
  */
-async function editEnvironmentHandler(environment: ApiEnvironment, context: vscode.ExtensionContext) {
+async function editEnvironmentHandler(environment: SchemaEnvironment, context: vscode.ExtensionContext) {
     try {
         console.log('Opening edit environment webview form...');
         

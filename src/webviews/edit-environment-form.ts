@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ConfigurationManager } from '../configuration';
-import { ApiEnvironment } from '../types';
+import { SchemaEnvironment } from '../types';
 
 export class EditEnvironmentWebview {
     private panel: vscode.WebviewPanel | undefined;
@@ -8,7 +8,7 @@ export class EditEnvironmentWebview {
     constructor(
         private readonly context: vscode.ExtensionContext,
         private readonly configManager: ConfigurationManager,
-        private readonly environment: ApiEnvironment,
+        private readonly environment: SchemaEnvironment,
         private readonly onEnvironmentUpdated: () => void
     ) {}
 
@@ -47,73 +47,68 @@ export class EditEnvironmentWebview {
 
     private async handleFormSubmission(data: any) {
         try {
-            // Show loading state
-            await this.panel?.webview.postMessage({
-                command: 'setLoading',
-                loading: true
-            });
+            await this.panel?.webview.postMessage({ command: 'setLoading', loading: true });
 
-            // Validate required fields
             if (!data.name?.trim()) {
-                await this.panel?.webview.postMessage({
-                    command: 'showError',
-                    error: 'Environment name is required'
-                });
+                await this.panel?.webview.postMessage({ command: 'showError', error: 'Environment name is required' });
                 return;
             }
-
             if (!data.baseUrl?.trim()) {
-                await this.panel?.webview.postMessage({
-                    command: 'showError',
-                    error: 'Base URL is required'
-                });
+                await this.panel?.webview.postMessage({ command: 'showError', error: 'Base URL is required' });
                 return;
             }
-
-            // Validate URL format
             try {
                 new URL(data.baseUrl.trim());
             } catch {
-                await this.panel?.webview.postMessage({
-                    command: 'showError',
-                    error: 'Please enter a valid URL'
-                });
+                await this.panel?.webview.postMessage({ command: 'showError', error: 'Please enter a valid URL' });
                 return;
             }
 
-            // Create the updated environment object
-            const updatedEnvironment: ApiEnvironment = {
+            // Prepare updated environment
+            const updatedEnvironment: SchemaEnvironment = {
                 ...this.environment,
                 name: data.name.trim(),
                 baseUrl: data.baseUrl.trim(),
-                description: data.description?.trim() || undefined
+                description: data.description?.trim() || undefined,
+                auth: { type: 'none' },
+                authSecretKey: undefined
             };
 
-            // Save the environment
+            // Handle authentication
+            if (data.authType && data.authType !== 'none') {
+                switch (data.authType) {
+                    case 'apikey':
+                        if (!data.apiKey?.trim()) { throw new Error('API Key is required for API Key authentication'); }
+                        updatedEnvironment.auth = {
+                            type: 'apikey',
+                            apiKeyLocation: data.apiKeyLocation || 'header',
+                            apiKeyName: data.apiKeyName?.trim() || 'X-API-Key'
+                        };
+                        updatedEnvironment.authSecretKey = await this.configManager.setCredentials(updatedEnvironment, { apiKey: data.apiKey.trim() });
+                        break;
+                    case 'bearer':
+                        if (!data.bearerToken?.trim()) { throw new Error('Bearer token is required for Bearer Token authentication'); }
+                        updatedEnvironment.auth = { type: 'bearer' };
+                        updatedEnvironment.authSecretKey = await this.configManager.setCredentials(updatedEnvironment, { apiKey: data.bearerToken.trim() });
+                        break;
+                    case 'basic':
+                        if (!data.username?.trim() || !data.password?.trim()) { throw new Error('Username and password are required for Basic Authentication'); }
+                        updatedEnvironment.auth = { type: 'basic', username: data.username.trim() };
+                        updatedEnvironment.authSecretKey = await this.configManager.setCredentials(updatedEnvironment, { username: data.username.trim(), password: data.password.trim() });
+                        break;
+                }
+            }
+
             await this.configManager.saveApiEnvironment(updatedEnvironment);
-
-            // Show success message
             vscode.window.showInformationMessage(`Environment "${updatedEnvironment.name}" updated successfully!`);
-
-            // Call the callback to refresh the tree
             this.onEnvironmentUpdated();
-
-            // Close the panel
             this.panel?.dispose();
-
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            await this.panel?.webview.postMessage({
-                command: 'showError',
-                error: `Failed to update environment: ${errorMessage}`
-            });
+            await this.panel?.webview.postMessage({ command: 'showError', error: `Failed to update environment: ${errorMessage}` });
             vscode.window.showErrorMessage(`Failed to update environment: ${errorMessage}`);
         } finally {
-            // Hide loading state
-            await this.panel?.webview.postMessage({
-                command: 'setLoading',
-                loading: false
-            });
+            await this.panel?.webview.postMessage({ command: 'setLoading', loading: false });
         }
     }
 
@@ -148,6 +143,7 @@ export class EditEnvironmentWebview {
         const escapedName = this.escapeHtml(this.environment.name || '');
         const escapedBaseUrl = this.escapeHtml(this.environment.baseUrl || '');
         const escapedDescription = this.escapeHtml(this.environment.description || '');
+        const authType = this.environment.auth?.type || 'none';
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -389,6 +385,63 @@ export class EditEnvironmentWebview {
                 <div class="changed-indicator" id="descriptionChanged" style="display: none;">Modified</div>
             </div>
 
+            <div class="form-group">
+                <label for="authType">Authentication Type</label>
+                <select id="authType" name="authType">
+                    <option value="none">None</option>
+                    <option value="apikey">API Key</option>
+                    <option value="bearer">Bearer Token</option>
+                    <option value="basic">Basic Authentication</option>
+                </select>
+                <div class="help-text">Select the authentication type for this environment</div>
+                <div class="changed-indicator" id="authTypeChanged" style="display: none;">Modified</div>
+            </div>
+
+            <div class="form-group">
+                <label for="apiKeyLocation">API Key Location</label>
+                <select id="apiKeyLocation" name="apiKeyLocation">
+                    <option value="header">Header</option>
+                    <option value="query">Query Parameter</option>
+                </select>
+                <div class="help-text">Select the location for the API Key</div>
+                <div class="changed-indicator" id="apiKeyLocationChanged" style="display: none;">Modified</div>
+            </div>
+
+            <div class="form-group">
+                <label for="apiKeyName">API Key Name</label>
+                <input type="text" id="apiKeyName" name="apiKeyName" value="${this.environment.auth?.apiKeyName || ''}" />
+                <div class="help-text">Enter the name for the API Key</div>
+                <div class="changed-indicator" id="apiKeyNameChanged" style="display: none;">Modified</div>
+            </div>
+
+            <div class="form-group">
+                <label for="apiKey">API Key</label>
+                <input type="text" id="apiKey" name="apiKey" value="${this.environment.auth?.apiKey || ''}" />
+                <div class="help-text">Enter the API Key for API Key authentication</div>
+                <div class="changed-indicator" id="apiKeyChanged" style="display: none;">Modified</div>
+            </div>
+
+            <div class="form-group">
+                <label for="bearerToken">Bearer Token</label>
+                <input type="text" id="bearerToken" name="bearerToken" value="${this.environment.auth?.bearerToken || ''}" />
+                <div class="help-text">Enter the Bearer Token for Bearer Token authentication</div>
+                <div class="changed-indicator" id="bearerTokenChanged" style="display: none;">Modified</div>
+            </div>
+
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" value="${this.environment.auth?.username || ''}" />
+                <div class="help-text">Enter the username for Basic Authentication</div>
+                <div class="changed-indicator" id="usernameChanged" style="display: none;">Modified</div>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" value="${this.environment.auth?.password || ''}" />
+                <div class="help-text">Enter the password for Basic Authentication</div>
+                <div class="changed-indicator" id="passwordChanged" style="display: none;">Modified</div>
+            </div>
+
             <div class="button-group">
                 <button type="submit" class="btn-primary" id="submitBtn">
                     Update Environment
@@ -426,12 +479,26 @@ export class EditEnvironmentWebview {
         const nameChanged = document.getElementById('nameChanged');
         const baseUrlChanged = document.getElementById('baseUrlChanged');
         const descriptionChanged = document.getElementById('descriptionChanged');
+        const authTypeChanged = document.getElementById('authTypeChanged');
+        const apiKeyLocationChanged = document.getElementById('apiKeyLocationChanged');
+        const apiKeyNameChanged = document.getElementById('apiKeyNameChanged');
+        const apiKeyChanged = document.getElementById('apiKeyChanged');
+        const bearerTokenChanged = document.getElementById('bearerTokenChanged');
+        const usernameChanged = document.getElementById('usernameChanged');
+        const passwordChanged = document.getElementById('passwordChanged');
 
         // Store original values for change detection
         const originalValues = {
             name: nameInput.value,
             baseUrl: baseUrlInput.value,
-            description: descriptionInput.value
+            description: descriptionInput.value,
+            authType: authType.value,
+            apiKeyLocation: apiKeyLocation.value,
+            apiKeyName: apiKeyName.value,
+            apiKey: apiKey.value,
+            bearerToken: bearerToken.value,
+            username: username.value,
+            password: password.value
         };
 
         // Form validation
@@ -442,12 +509,26 @@ export class EditEnvironmentWebview {
             const nameHasChanged = nameInput.value !== originalValues.name;
             const baseUrlHasChanged = baseUrlInput.value !== originalValues.baseUrl;
             const descriptionHasChanged = descriptionInput.value !== originalValues.description;
+            const authTypeHasChanged = authType.value !== originalValues.authType;
+            const apiKeyLocationHasChanged = apiKeyLocation.value !== originalValues.apiKeyLocation;
+            const apiKeyNameHasChanged = apiKeyName.value !== originalValues.apiKeyName;
+            const apiKeyHasChanged = apiKey.value !== originalValues.apiKey;
+            const bearerTokenHasChanged = bearerToken.value !== originalValues.bearerToken;
+            const usernameHasChanged = username.value !== originalValues.username;
+            const passwordHasChanged = password.value !== originalValues.password;
 
             nameChanged.style.display = nameHasChanged ? 'block' : 'none';
             baseUrlChanged.style.display = baseUrlHasChanged ? 'block' : 'none';
             descriptionChanged.style.display = descriptionHasChanged ? 'block' : 'none';
+            authTypeChanged.style.display = authTypeHasChanged ? 'block' : 'none';
+            apiKeyLocationChanged.style.display = apiKeyLocationHasChanged ? 'block' : 'none';
+            apiKeyNameChanged.style.display = apiKeyNameHasChanged ? 'block' : 'none';
+            apiKeyChanged.style.display = apiKeyHasChanged ? 'block' : 'none';
+            bearerTokenChanged.style.display = bearerTokenHasChanged ? 'block' : 'none';
+            usernameChanged.style.display = usernameHasChanged ? 'block' : 'none';
+            passwordChanged.style.display = passwordHasChanged ? 'block' : 'none';
 
-            const hasAnyChanges = nameHasChanged || baseUrlHasChanged || descriptionHasChanged;
+            const hasAnyChanges = nameHasChanged || baseUrlHasChanged || descriptionHasChanged || authTypeHasChanged || apiKeyLocationHasChanged || apiKeyNameHasChanged || apiKeyHasChanged || bearerTokenHasChanged || usernameHasChanged || passwordHasChanged;
             updateSubmitButton(hasAnyChanges);
         }
 
@@ -482,6 +563,27 @@ export class EditEnvironmentWebview {
         // Monitor description changes
         descriptionInput.addEventListener('input', checkForChanges);
 
+        // Monitor authentication type changes
+        authType.addEventListener('change', checkForChanges);
+
+        // Monitor API Key location changes
+        apiKeyLocation.addEventListener('change', checkForChanges);
+
+        // Monitor API Key name changes
+        apiKeyName.addEventListener('input', checkForChanges);
+
+        // Monitor API Key changes
+        apiKey.addEventListener('input', checkForChanges);
+
+        // Monitor Bearer Token changes
+        bearerToken.addEventListener('input', checkForChanges);
+
+        // Monitor username changes
+        username.addEventListener('input', checkForChanges);
+
+        // Monitor password changes
+        password.addEventListener('input', checkForChanges);
+
         // Update submit button state
         function updateSubmitButton(hasChanges = false) {
             const name = nameInput.value.trim();
@@ -506,7 +608,14 @@ export class EditEnvironmentWebview {
             const formData = {
                 name: nameInput.value.trim(),
                 baseUrl: baseUrlInput.value.trim(),
-                description: descriptionInput.value.trim()
+                description: descriptionInput.value.trim(),
+                authType: authType.value,
+                apiKeyLocation: apiKeyLocation.value,
+                apiKeyName: apiKeyName.value,
+                apiKey: apiKey.value,
+                bearerToken: bearerToken.value,
+                username: username.value,
+                password: password.value
             };
 
             // Basic validation
