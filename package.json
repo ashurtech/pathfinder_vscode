@@ -2,7 +2,7 @@
   "name": "pathfinder-openapi-explorer",
   "displayName": "Pathfinder - OpenAPI Explorer",
   "description": "Explore, test, and generate code for OpenAPI/REST APIs with intelligent platform detection",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "publisher": "ASHURTECHNET",
   "icon": "pathfinder.png",
   "repository": {
@@ -231,8 +231,7 @@
         "command": "pathfinder.resetSession",
         "title": "Reset Pathfinder Session",
         "category": "Pathfinder"
-      },
-      {
+      },      {
         "command": "pathfinder.factoryReset",
         "title": "Factory Reset (Remove All User Data)",
         "category": "Pathfinder"
@@ -240,6 +239,12 @@
       {
         "command": "pathfinder.clearRequestHistory",
         "title": "Clear Request History"
+      },
+      {
+        "command": "pathfinder.runInNotebook",
+        "title": "Run in Request Notebook",
+        "icon": "$(notebook)",
+        "category": "Pathfinder"
       }
     ],
     "configuration": {
@@ -284,8 +289,18 @@
         "extensions": [
           ".http",
           ".rest"
-        ],
-        "configuration": "./language-configuration.json"
+        ],        "configuration": "./language-configuration.json"
+      }
+    ],
+    "notebooks": [
+      {
+        "type": "pathfinder-http-notebook",
+        "displayName": "Pathfinder HTTP Request Notebook",
+        "selector": [
+          {
+            "filenamePattern": "*.pfhttp"
+          }
+        ]
       }
     ],
     "views": {

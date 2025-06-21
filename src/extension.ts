@@ -15,6 +15,7 @@ import { SchemaLoader } from './schema-loader';
 import { ApiTreeProvider } from './tree-provider';
 import { HttpRequestRunner } from './http-runner';
 import { HttpCodeLensProvider } from './http-codelens';
+import { NotebookController, NotebookProvider } from './notebook';
 import { 
     showEnvironmentDetailsCommand, 
     showSchemaDetailsCommand, 
@@ -39,6 +40,7 @@ let configManager: ConfigurationManager;
 let schemaLoader: SchemaLoader;
 let treeProvider: ApiTreeProvider;
 let httpRunner: HttpRequestRunner;
+let notebookController: NotebookController;
 
 /**
  * This method is called when your extension is activated
@@ -52,6 +54,15 @@ export async function activate(context: vscode.ExtensionContext) {
     schemaLoader = new SchemaLoader();
     httpRunner = new HttpRequestRunner(configManager);
     treeProvider = new ApiTreeProvider(configManager, schemaLoader);
+      // Initialize notebook functionality
+    notebookController = new NotebookController(context, configManager);
+    const notebookProvider = new NotebookProvider();
+    
+    // Register notebook provider
+    const notebookProviderRegistration = vscode.workspace.registerNotebookSerializer(
+        'pathfinder-http-notebook',
+        notebookProvider
+    );
       // Register the tree view with drag and drop support
     const treeView = vscode.window.createTreeView('pathfinderExplorer', {
         treeDataProvider: treeProvider,
@@ -77,9 +88,13 @@ export async function activate(context: vscode.ExtensionContext) {
     registerCommands(context);
     
     // Register tree view commands
-    registerTreeCommands(context);
-      // Add disposables to subscriptions
-    context.subscriptions.push(treeView, requestHistoryView, codeLensProviderDisposable);
+    registerTreeCommands(context);    // Add disposables to subscriptions
+    context.subscriptions.push(
+        treeView, 
+        requestHistoryView, 
+        codeLensProviderDisposable,
+        notebookProviderRegistration
+    );
     
     // Register request history commands
     context.subscriptions.push(
@@ -114,7 +129,23 @@ function registerCommands(context: vscode.ExtensionContext) {
     const helloWorldCommand = vscode.commands.registerCommand('pathfinder.helloWorld', () => {
         vscode.window.showInformationMessage('Hello World from Pathfinder - OpenAPI Explorer!');
     });
+      // ========================
+    // Notebook Commands
+    // ========================
     
+    const runInNotebookCommand = vscode.commands.registerCommand(
+        'pathfinder.runInNotebook',
+        async (endpoint: EndpointInfo, schemaId: string, environmentId?: string) => {
+            try {
+                const notebook = await notebookController.createNotebookFromEndpoint(endpoint, schemaId, environmentId);
+                await notebookController.openNotebook(notebook);
+                vscode.window.showInformationMessage(`Opened ${endpoint.method.toUpperCase()} ${endpoint.path} in notebook`);
+            } catch (error) {
+                vscode.window.showErrorMessage(`Failed to create notebook: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+    );
+
     // ========================
     // Environment Management Commands
     // ========================
@@ -495,9 +526,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 );
             }
         }
-    );
-
-    // Add all commands to the context so they get cleaned up when the extension deactivates
+    );    // Add all commands to the context so they get cleaned up when the extension deactivates
     context.subscriptions.push(
         helloWorldCommand,
         addEnvironmentCommand,
@@ -532,7 +561,8 @@ function registerCommands(context: vscode.ExtensionContext) {
         renameEnvironmentCommand,
         renameGroupCommand,
         exportConfigurationCommand,
-        importConfigurationCommand
+        importConfigurationCommand,
+        runInNotebookCommand
     );
 }
 

@@ -130,6 +130,9 @@ export interface EndpointInfo {
     /** The HTTP method (GET, POST, PUT, DELETE, etc.) */
     method: string;
     
+    /** Unique identifier for this endpoint */
+    operationId?: string;
+    
     /** Brief description of what this endpoint does */
     summary?: string;
     
@@ -138,6 +141,9 @@ export interface EndpointInfo {
     
     /** Parameters this endpoint accepts */
     parameters?: ApiParameter[];
+    
+    /** Request body schema (for POST/PUT requests) */
+    requestBody?: any;
     
     /** Tags for grouping endpoints */
     tags?: string[];

@@ -344,8 +344,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
         );
     }    /**
      * Get children for an endpoint (action items like "View Details", "Generate cURL", etc.)
-     */
-    private getEndpointChildren(endpointItem: EndpointTreeItem): TreeItem[] {
+     */    private getEndpointChildren(endpointItem: EndpointTreeItem): TreeItem[] {
         const endpoint = endpointItem.endpoint;
         const schemaItem = endpointItem.schemaItem;
         const environment = endpointItem.environment;
@@ -365,6 +364,13 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 'pathfinder.runHttpRequest',
                 'play',
                 [endpoint, schemaItem, environment]
+            ),
+            new EndpointActionTreeItem(
+                '📓 Run in Request Notebook',
+                'Open this endpoint in an interactive notebook editor',
+                'pathfinder.runInNotebook',
+                'notebook',
+                [endpoint, schemaItem.schema.id, environment.id]
             )
         ];
     }
