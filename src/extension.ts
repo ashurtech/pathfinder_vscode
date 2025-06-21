@@ -701,16 +701,16 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
         'pathfinder.generateJavaScript',
         (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'javascript')
     );
-    
-    const testEndpointCmd = vscode.commands.registerCommand(
+      const testEndpointCmd = vscode.commands.registerCommand(
         'pathfinder.testEndpoint',
         testEndpointCommand
     );
     
-    const runHttpRequestCmd = vscode.commands.registerCommand(
-        'pathfinder.runHttpRequest',
-        (endpoint: any, schemaItem: any, environment: any, context: vscode.ExtensionContext) => runHttpRequestCommand(endpoint, schemaItem, environment, context)
-    );
+    // REMOVED: Old HTTP request editor command - migrated to notebook-first architecture
+    // const runHttpRequestCmd = vscode.commands.registerCommand(
+    //     'pathfinder.runHttpRequest',
+    //     (endpoint: any, schemaItem: any, environment: any, context: vscode.ExtensionContext) => runHttpRequestCommand(endpoint, schemaItem, environment, context)
+    // );
     
     const executeHttpRequestCmd = vscode.commands.registerCommand(
         'pathfinder.executeHttpRequest',
@@ -736,14 +736,13 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
         showEnvironmentDetailsCmd,
         showSchemaDetailsCmd,
         showEndpointDetailsCmd,
-        generateCodeCmd,
-        generateCurlCmd,
+        generateCodeCmd,        generateCurlCmd,
         generateAnsibleCmd,
         generatePowerShellCmd,
         generatePythonCmd,
         generateJavaScriptCmd,
         testEndpointCmd,
-        runHttpRequestCmd,
+        // REMOVED: runHttpRequestCmd - migrated to notebook-first architecture
         executeHttpRequestCmd,
         toggleAuthVisibilityCmd,
         refreshTreeCmd
@@ -1281,39 +1280,14 @@ async function ensureEnvironmentSecrets(context: vscode.Extension.Context, envir
 }
 
 /**
- * Command to run HTTP request from endpoint
+ * REMOVED: Old HTTP request command - migrated to notebook-first architecture
+ * 
+ * The old HTTP request editor functionality has been replaced with the notebook-based approach.
+ * All endpoint testing should now use the 'pathfinder.runInNotebook' command instead.
+ * 
+ * This function was removed as part of the migration to a cleaner, more powerful
+ * notebook-first architecture for API exploration and testing.
  */
-async function runHttpRequestCommand(endpoint: any, schemaItem: any, environment: any, context: vscode.Extension.Context) {
-    try {
-        if (!environment) {
-            vscode.window.showErrorMessage('Environment not found');
-            return;
-        }
-
-        // Ensure secrets are present
-        await ensureEnvironmentSecrets(context, environment);
-
-        // Get the schema's platform configuration if available
-        const schemas = await configManager.getLoadedSchemas(environment.id);
-        const platformConfig = schemas.length > 0 ? schemas[0].platformConfig : undefined;
-
-        // Create EndpointInfo from the endpoint data
-        const endpointInfo: EndpointInfo = {
-            path: endpoint.path,
-            method: endpoint.method,
-            summary: endpoint.summary,
-            description: endpoint.description,
-            parameters: endpoint.parameters ?? [],
-            tags: endpoint.tags ?? []
-        };
-
-        // Open HTTP request editor with platform configuration
-        await httpRunner.openRequestEditor(endpointInfo, environment, platformConfig);
-        
-    } catch (error) {
-        vscode.window.showErrorMessage(`Failed to open HTTP request: ${error}`);
-    }
-}
 
 /**
  * Command to execute HTTP request from CodeLens
