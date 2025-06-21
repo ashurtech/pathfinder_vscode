@@ -132,8 +132,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
     }
     /**
      * Get the root level items for schema-first architecture: all schemas at top level
-     */
-    private async getSchemas(): Promise<TreeItem[]> {
+     */    private async getSchemas(): Promise<TreeItem[]> {
         try {
             const items: TreeItem[] = [];
             
@@ -142,14 +141,9 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
             items.push(...allSchemas.map((schema: ApiSchema) => new ApiSchemaTreeItem(schema, this.schemaLoader)));
             
             if (items.length === 0) {
-                // Show helpful messages when nothing exists
-                return [
-                    new MessageTreeItem(
-                        'No schemas configured',
-                        'Click "Add Schema" to get started',
-                        'add'
-                    )
-                ];
+                // Return empty array to allow VS Code's viewsWelcome to show
+                // The welcome panel is configured in package.json with "when": "!pathfinder.hasUserData"
+                return [];
             }
             
             return items;

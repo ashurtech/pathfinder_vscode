@@ -2150,8 +2150,20 @@ export function deactivate() {
 
 // Utility to update the welcome context key
 async function updateWelcomeContext() {
-    const envs = await configManager.getApiEnvironments();
-    const schemas = await (configManager.getApiSchemas?.() || []);
-    const hasUserData = (envs && envs.length > 0) || (schemas && schemas.length > 0);
-    await vscode.commands.executeCommand('setContext', 'pathfinder.hasUserData', hasUserData);
+    try {
+        const schemas = await configManager.getApiSchemas();
+        const environments = await configManager.getSchemaEnvironments();
+        const environmentGroups = await configManager.getSchemaEnvironmentGroups();
+        
+        // User has data if they have any schemas, environments, or environment groups
+        const hasUserData = (schemas && schemas.length > 0) || 
+                           (environments && environments.length > 0) || 
+                           (environmentGroups && environmentGroups.length > 0);
+        
+        await vscode.commands.executeCommand('setContext', 'pathfinder.hasUserData', hasUserData);
+    } catch (error) {
+        console.error('Error updating welcome context:', error);
+        // If there's an error, assume no user data to show welcome panel
+        await vscode.commands.executeCommand('setContext', 'pathfinder.hasUserData', false);
+    }
 }
