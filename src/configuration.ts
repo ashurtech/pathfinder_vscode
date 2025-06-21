@@ -31,9 +31,8 @@ export class ConfigurationManager {
     
     /**
      * Get all API schemas in the new schema-first architecture
-     */
-    async getApiSchemas(): Promise<ApiSchema[]> {
-        const schemas = this.context.globalState.get<ApiSchema[]>('apiSchemas', []);
+     */    async getApiSchemas(): Promise<ApiSchema[]> {
+        const schemas = this.context.globalState.get<ApiSchema[]>('apiSchemas', []) || [];
         return schemas.map(schema => ({
             ...schema,
             loadedAt: new Date(schema.loadedAt),
@@ -745,16 +744,24 @@ export class ConfigurationManager {
                 for (const group of data.environmentGroups) {
                     await this.saveSchemaEnvironmentGroup(group);
                 }
-            }
-
-            // Import settings
+            }            // Import settings
             if (data.settings) {
                 await this.updateExtensionSettings(data.settings);
+            }            const environments = data.environments ?? [];
+            const environmentGroups = data.environmentGroups ?? [];
+
+            // Check for missing credentials and show webview if needed
+            const { missingEnvs, missingGroups } = await this.checkMissingCredentials(environments, environmentGroups);
+            if (missingEnvs.length > 0 || missingGroups.length > 0) {
+                // Show credentials webview after a short delay to allow import to complete
+                setTimeout(() => {
+                    this.showCredentialsWebview(missingEnvs, missingGroups);
+                }, 1000);
             }
 
             return {
-                environments: data.environments || [],
-                environmentGroups: data.environmentGroups || []
+                environments,
+                environmentGroups
             };
 
         } catch (error) {
@@ -796,7 +803,221 @@ export class ConfigurationManager {
 
         // Fallback to no authentication
         return {
-            auth: { type: 'none' }
-        };
+            auth: { type: 'none' }        };
+    }
+
+    /**
+     * Show credentials webview for environments and groups that need authentication
+     */
+    async showCredentialsWebview(environments: SchemaEnvironment[], groups: SchemaEnvironmentGroup[]): Promise<void> {
+        if (environments.length === 0 && groups.length === 0) {
+            return; // Nothing to show
+        }
+
+        const panel = vscode.window.createWebviewPanel(
+            'setCredentials',
+            'Set Authentication Credentials',
+            vscode.ViewColumn.One,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true
+            }
+        );
+
+        // Group items by schema for better organization
+        const itemsBySchema = await this.groupItemsBySchema(environments, groups);
+
+        panel.webview.html = this.getCredentialsWebviewContent(itemsBySchema);
+        
+        // Handle messages from the webview
+        panel.webview.onDidReceiveMessage(async (message) => {
+            if (message.command === 'saveCredentials') {
+                try {
+                    let savedCount = 0;
+                    
+                    for (const [key, value] of Object.entries(message.credentials)) {
+                        if (value && typeof value === 'string' && value.trim() !== '') {
+                            await this.context.secrets.store(key, value.trim());
+                            savedCount++;
+                        }
+                    }
+                    
+                    // Send success feedback to webview
+                    panel.webview.postMessage({
+                        command: 'showSuccess',
+                        message: 'Successfully saved ' + savedCount + ' credential(s)',
+                        count: savedCount
+                    });
+                    
+                    // Auto-close webview after 2 seconds if all credentials were saved
+                    const totalFields = Object.keys(message.credentials).length;
+                    if (savedCount === totalFields && savedCount > 0) {
+                        setTimeout(() => {
+                            panel.dispose();
+                        }, 2000);
+                    }
+                    
+                } catch (error) {
+                    console.error('Error saving credentials:', error);
+                    panel.webview.postMessage({
+                        command: 'showError',
+                        message: 'Error saving credentials: ' + (error instanceof Error ? error.message : 'Unknown error')
+                    });
+                }
+            }
+        });
+    }
+
+    /**
+     * Group environments and groups by their associated schema for better organization
+     */
+    private async groupItemsBySchema(environments: SchemaEnvironment[], groups: SchemaEnvironmentGroup[]): Promise<Map<string, { environments: SchemaEnvironment[], groups: SchemaEnvironmentGroup[] }>> {
+        const schemas = new Map<string, { environments: SchemaEnvironment[], groups: SchemaEnvironmentGroup[] }>();
+        
+        // Group environments by schema
+        for (const env of environments) {
+            const schemaName = await this.getSchemaNameForEnvironment(env);
+            if (!schemas.has(schemaName)) {
+                schemas.set(schemaName, { environments: [], groups: [] });
+            }
+            schemas.get(schemaName)!.environments.push(env);
+        }
+        
+        // Group environment groups by schema
+        for (const group of groups) {
+            const schemaName = await this.getSchemaNameForGroup(group);
+            if (!schemas.has(schemaName)) {
+                schemas.set(schemaName, { environments: [], groups: [] });
+            }
+            schemas.get(schemaName)!.groups.push(group);
+        }
+        
+        return schemas;
+    }    /**
+     * Get schema name for an environment
+     */
+    private async getSchemaNameForEnvironment(env: SchemaEnvironment): Promise<string> {
+        try {
+            const allSchemas = await this.getApiSchemas();
+            const schema = allSchemas.find(s => s.id === env.schemaId);
+            return schema ? schema.name : 'Unknown Schema';
+        } catch (error) {
+            console.error('Error getting schema name for environment:', error);
+            return 'Unknown Schema';
+        }
+    }    /**
+     * Get schema name for an environment group
+     */
+    private async getSchemaNameForGroup(group: SchemaEnvironmentGroup): Promise<string> {
+        try {
+            const allSchemas = await this.getApiSchemas();
+            const schema = allSchemas.find(s => s.id === group.schemaId);
+            return schema ? schema.name : 'Unknown Schema';
+        } catch (error) {
+            console.error('Error getting schema name for group:', error);
+            return 'Unknown Schema';
+        }
+    }
+
+    /**
+     * Check which environments and groups need credentials after import
+     */
+    async checkMissingCredentials(environments: SchemaEnvironment[], groups: SchemaEnvironmentGroup[]): Promise<{ missingEnvs: SchemaEnvironment[], missingGroups: SchemaEnvironmentGroup[] }> {
+        const missingEnvs: SchemaEnvironment[] = [];
+        const missingGroups: SchemaEnvironmentGroup[] = [];
+
+        // Check environments that have auth configured but no credentials
+        for (const env of environments) {
+            if (env.auth && env.authSecretKey) {
+                const credentials = await this.context.secrets.get(env.authSecretKey);
+                if (!credentials) {
+                    missingEnvs.push(env);
+                }
+            }
+        }
+
+        // Check groups that have default auth configured but no credentials
+        for (const group of groups) {
+            if (group.defaultAuth && group.authSecretKey) {
+                const credentials = await this.context.secrets.get(group.authSecretKey);
+                if (!credentials) {
+                    missingGroups.push(group);
+                }
+            }
+        }
+
+        return { missingEnvs, missingGroups };
+    }
+
+    /**
+     * Generate the HTML content for the credentials webview
+     */
+    private getCredentialsWebviewContent(itemsBySchema: Map<string, { environments: SchemaEnvironment[], groups: SchemaEnvironmentGroup[] }>): string {
+        let html = '<!DOCTYPE html><html><head><title>Set Credentials</title>';
+        html += '<style>body{font-family:var(--vscode-font-family);padding:20px;}';
+        html += '.section{margin:20px 0;border:1px solid #ccc;padding:15px;border-radius:5px;}';
+        html += '.title{font-weight:bold;margin-bottom:10px;}';
+        html += 'input{width:100%;padding:8px;margin:5px 0;}';
+        html += 'button{background:#007acc;color:white;padding:10px 20px;border:none;border-radius:3px;cursor:pointer;}';
+        html += '.feedback{padding:10px;margin:10px 0;display:none;border-radius:3px;}';
+        html += '.success{background:#d4edda;color:#155724;border:1px solid #c3e6cb;}';
+        html += '.error{background:#f8d7da;color:#721c24;border:1px solid #f5c6cb;}</style></head>';
+        html += '<body><h1>Set Authentication Credentials</h1>';
+        html += '<div id="feedback" class="feedback"></div>';
+        html += '<form id="credentialsForm">';
+          const schemaNames = Array.from(itemsBySchema.keys());
+        for (const schemaName of schemaNames) {
+            const items = itemsBySchema.get(schemaName)!;
+            html += '<div class="section"><div class="title">Schema: ' + schemaName + '</div>';
+            
+            if (items.groups.length > 0) {
+                html += '<h3>Environment Groups:</h3>';
+                for (const group of items.groups) {                    const secretKey = group.authSecretKey ?? 'group_' + group.id + '_auth';
+                    html += '<div><label>' + group.name + ' (' + (group.defaultAuth?.type ?? 'unknown') + '):</label>';
+                    html += '<input type="password" name="' + secretKey + '" placeholder="Enter credentials"/></div>';
+                }
+            }
+            
+            if (items.environments.length > 0) {
+                html += '<h3>Individual Environments:</h3>';
+                for (const env of items.environments) {
+                    const secretKey = env.authSecretKey ?? 'env_' + env.id + '_auth';
+                    html += '<div><label>' + env.name + ' (' + (env.auth?.type || 'unknown') + '):</label>';
+                    html += '<input type="password" name="' + secretKey + '" placeholder="Enter credentials"/></div>';
+                }
+            }
+            
+            html += '</div>';
+        }
+        
+        html += '<button type="submit" id="saveButton">Save Credentials</button></form>';
+        html += '<script>';
+        html += 'const vscode = acquireVsCodeApi();';
+        html += 'document.getElementById("credentialsForm").addEventListener("submit", (e) => {';
+        html += 'e.preventDefault();';
+        html += 'const formData = new FormData(e.target);';
+        html += 'const credentials = {};';
+        html += 'for (const [key, value] of formData.entries()) { credentials[key] = value; }';
+        html += 'document.getElementById("saveButton").disabled = true;';
+        html += 'vscode.postMessage({ command: "saveCredentials", credentials: credentials });';
+        html += '});';
+        html += 'window.addEventListener("message", event => {';
+        html += 'const message = event.data;';
+        html += 'const feedback = document.getElementById("feedback");';
+        html += 'const button = document.getElementById("saveButton");';
+        html += 'if (message.command === "showSuccess") {';
+        html += 'feedback.textContent = message.message;';
+        html += 'feedback.className = "feedback success";';
+        html += 'feedback.style.display = "block";';
+        html += 'button.disabled = false;';
+        html += '} else if (message.command === "showError") {';
+        html += 'feedback.textContent = message.message;';
+        html += 'feedback.className = "feedback error";';
+        html += 'feedback.style.display = "block";';
+        html += 'button.disabled = false;';
+        html += '}});';
+        html += '</script></body></html>';
+        
+        return html;
     }
 }
