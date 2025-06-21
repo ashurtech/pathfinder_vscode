@@ -13,8 +13,25 @@ type SimpleIconsCollection = Record<string, { svg: string; title: string; hex: s
  * Get the icons collection from simple-icons (handles different export formats)
  */
 function getIconsCollection(): SimpleIconsCollection {
-    // simple-icons exports can vary, handle both patterns
-    return (icons as any).default ?? icons as SimpleIconsCollection;
+    // simple-icons v13+ uses 'si' prefix (e.g., siGithub instead of github)
+    const iconsModule = (icons as any).default ?? icons;
+    
+    // If we have the new format with 'si' prefix, convert to old format for backwards compatibility
+    if (iconsModule && typeof iconsModule === 'object') {
+        const convertedIcons: SimpleIconsCollection = {};
+        
+        for (const [key, value] of Object.entries(iconsModule)) {
+            if (key.startsWith('si') && value && typeof value === 'object' && 'svg' in value) {
+                // Convert siGithub -> github
+                const simpleName = key.slice(2).toLowerCase();
+                convertedIcons[simpleName] = value as { svg: string; title: string; hex: string };
+            }
+        }
+        
+        return convertedIcons;
+    }
+    
+    return iconsModule as SimpleIconsCollection;
 }
 
 /**
@@ -242,7 +259,7 @@ function extractDomainFromUrl(url: string): string | null {
 /**
  * Find the best matching icon for a schema with user override support
  */
-export function getSchemaIcon(schema: any, schemaName?: string, schemaSource?: string, schemaConfig?: any): { iconName: string; iconSvg: string } | null {
+export function getSchemaIcon(schema: any, schemaName?: string, schemaSource?: string, schemaConfig?: any): { iconName: string; iconSvg: string; hex?: string } | null {
     const iconsCollection = getIconsCollection();
     
     // Check for user overrides first
@@ -253,13 +270,13 @@ export function getSchemaIcon(schema: any, schemaName?: string, schemaSource?: s
         if (override.useBrandIcon === false) {
             return null;
         }
-        
-        // If user specified a manual icon
+          // If user specified a manual icon
         if (override.manualIconName && iconsCollection[override.manualIconName]) {
             const icon = iconsCollection[override.manualIconName];
             return {
                 iconName: override.manualIconName,
-                iconSvg: icon.svg
+                iconSvg: icon.svg,
+                hex: icon.hex
             };
         }
     }
@@ -282,30 +299,46 @@ export function getSchemaIcon(schema: any, schemaName?: string, schemaSource?: s
             keywords.push(domain);
         }
     }
-    
-    // Look for direct matches in our mapping
+      // Look for direct matches in our mapping
     for (const keyword of keywords) {
         const iconSlug = API_ICON_MAPPINGS[keyword];
         if (iconSlug && iconsCollection[iconSlug]) {
             const icon = iconsCollection[iconSlug];
             return {
                 iconName: iconSlug,
-                iconSvg: icon.svg
+                iconSvg: icon.svg,
+                hex: icon.hex
             };
         }
-    }
-    
-    // Look for partial matches in simple-icons
+    }// Look for partial matches in simple-icons (avoid single character matches)
     for (const keyword of keywords) {
-        const iconSlug = Object.keys(iconsCollection).find(slug => 
-            slug.includes(keyword) || keyword.includes(slug)
-        );
+        // Only consider keywords that are at least 3 characters to avoid false matches
+        if (keyword.length < 3) {
+            continue;
+        }
         
-        if (iconSlug && iconsCollection[iconSlug]) {
+        const iconSlug = Object.keys(iconsCollection).find(slug => {
+            // Avoid very short slugs that might match accidentally 
+            if (slug.length < 2) {
+                return false;
+            }
+            // Only exact matches or where slug is at start/end of keyword
+            if (slug === keyword) {
+                return true;
+            }
+            // Match if keyword starts or ends with slug (but not in the middle)
+            if (slug.length >= 3 && (keyword.startsWith(slug) || keyword.endsWith(slug))) {
+                return true;
+            }
+            // Match if slug contains keyword (for composite brand names)
+            return slug.includes(keyword);
+        });
+          if (iconSlug && iconsCollection[iconSlug]) {
             const icon = iconsCollection[iconSlug];
             return {
                 iconName: iconSlug,
-                iconSvg: icon.svg
+                iconSvg: icon.svg,
+                hex: icon.hex
             };
         }
     }
@@ -317,21 +350,21 @@ export function getSchemaIcon(schema: any, schemaName?: string, schemaSource?: s
     if (schemaStr.includes('oauth') || schemaStr.includes('authentication')) {
         const authIcon = iconsCollection['auth0'];
         if (authIcon) {
-            return { iconName: 'auth0', iconSvg: authIcon.svg };
+            return { iconName: 'auth0', iconSvg: authIcon.svg, hex: authIcon.hex };
         }
     }
     
     if (schemaStr.includes('webhook') || schemaStr.includes('event')) {
         const webhookIcon = iconsCollection['webhook'];
         if (webhookIcon) {
-            return { iconName: 'webhook', iconSvg: webhookIcon.svg };
+            return { iconName: 'webhook', iconSvg: webhookIcon.svg, hex: webhookIcon.hex };
         }
     }
     
     if (schemaStr.includes('graphql')) {
         const graphqlIcon = iconsCollection['graphql'];
         if (graphqlIcon) {
-            return { iconName: 'graphql', iconSvg: graphqlIcon.svg };
+            return { iconName: 'graphql', iconSvg: graphqlIcon.svg, hex: graphqlIcon.hex };
         }
     }
     
@@ -340,7 +373,59 @@ export function getSchemaIcon(schema: any, schemaName?: string, schemaSource?: s
 }
 
 /**
- * Convert SVG to VS Code tree icon (data URI)
+ * Convert SVG to themed icons with proper color handling for light/dark modes
+ */
+export function svgToThemedIcon(svg: string, hexColor: string, iconName: string): { light: string; dark: string } {
+    // Convert hex to RGB for brightness calculation
+    const hex = hexColor.replace('#', '');
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    
+    // Calculate relative luminance (perceived brightness)
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    
+    // Create light theme version (use original color)
+    const lightSvg = svg.replace(/<svg([^>]*)>/, `<svg$1 fill="#${hex}">`);
+    
+    // Create dark theme version with better visibility
+    let darkColor: string;
+    if (luminance < 0.3) {
+        // Very dark colors: make them much lighter
+        darkColor = lightenColor(hex, 0.7); // Lighten by 70%
+    } else if (luminance < 0.5) {
+        // Medium dark colors: lighten moderately  
+        darkColor = lightenColor(hex, 0.4); // Lighten by 40%
+    } else {
+        // Light colors: use original or slightly modify
+        darkColor = hex;
+    }
+    
+    const darkSvg = svg.replace(/<svg([^>]*)>/, `<svg$1 fill="#${darkColor}">`);
+    
+    return {
+        light: `data:image/svg+xml;base64,${Buffer.from(lightSvg).toString('base64')}`,
+        dark: `data:image/svg+xml;base64,${Buffer.from(darkSvg).toString('base64')}`
+    };
+}
+
+/**
+ * Lighten a hex color by a given factor (0-1)
+ */
+function lightenColor(hex: string, factor: number): string {
+    const r = parseInt(hex.substring(0, 2), 16);
+    const g = parseInt(hex.substring(2, 4), 16);
+    const b = parseInt(hex.substring(4, 6), 16);
+    
+    const newR = Math.min(255, Math.round(r + (255 - r) * factor));
+    const newG = Math.min(255, Math.round(g + (255 - g) * factor));
+    const newB = Math.min(255, Math.round(b + (255 - b) * factor));
+    
+    return [newR, newG, newB].map(c => c.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Convert SVG to VS Code tree icon (data URI) - Legacy function for compatibility
  */
 export function svgToTreeIcon(svg: string, color?: string): vscode.ThemeIcon {
     // For simple usage, return a ThemeIcon with a fallback
@@ -349,8 +434,23 @@ export function svgToTreeIcon(svg: string, color?: string): vscode.ThemeIcon {
 }
 
 /**
- * Get all available brand icons (for debugging/testing)
+ * Get theme-aware icon URIs for a schema (includes both light and dark versions)
  */
+export function getSchemaIconThemed(schema: any, schemaName?: string, schemaSource?: string, schemaConfig?: any): { light: string; dark: string; iconName: string } | null {
+    const brandIcon = getSchemaIcon(schema, schemaName, schemaSource, schemaConfig);
+      if (!brandIcon?.hex) {
+        return null;
+    }
+    
+    // Generate theme-aware icons
+    const themedIcons = svgToThemedIcon(brandIcon.iconSvg, brandIcon.hex, brandIcon.iconName);
+    
+    return {
+        light: themedIcons.light,
+        dark: themedIcons.dark,
+        iconName: brandIcon.iconName
+    };
+}
 export function getAvailableBrandIcons(): string[] {
     const iconsCollection = getIconsCollection();
     return Object.keys(iconsCollection).sort((a, b) => a.localeCompare(b));

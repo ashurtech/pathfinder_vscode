@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { ConfigurationManager } from '../configuration';
 import { SchemaLoader } from '../schema-loader';
 import { ApiSchema } from '../types';
+import { getPopularIcons, getAllAvailableIcons } from '../schema-icon-mapper';
 
 export class AddSchemaWebview {
     private panel: vscode.WebviewPanel | undefined;
@@ -43,9 +44,7 @@ export class AddSchemaWebview {
 
         // Set the HTML content
         this.panel.webview.html = this.getWebviewContent();
-    }
-
-    private async handleMessage(message: any) {
+    }    private async handleMessage(message: any) {
         switch (message.command) {
             case 'submitForm':
                 await this.handleFormSubmission(message.data);
@@ -58,6 +57,12 @@ export class AddSchemaWebview {
                 break;
             case 'browseFile':
                 await this.handleFileBrowser();
+                break;
+            case 'getPopularIcons':
+                this.sendPopularIcons();
+                break;
+            case 'searchIcons':
+                this.searchIcons(message.query);
                 break;
         }
     }
@@ -125,6 +130,7 @@ export class AddSchemaWebview {
                 description: data.description?.trim() ?? info.description,
                 schema: loadedSchema.schema,
                 source: source,
+                schema_url: data.sourceType === 'url' ? source : undefined,
                 loadedAt: new Date(),
                 lastUpdated: new Date(),
                 isValid: loadedSchema.isValid,
@@ -136,7 +142,12 @@ export class AddSchemaWebview {
                     defaultAuthType: 'none',
                     defaultTimeout: 30000
                 },
-                color: data.color ?? 'blue'
+                color: data.color ?? 'blue',
+                iconOverride: data.iconSettings ? {
+                    useBrandIcon: data.iconSettings.useBrandIcon,
+                    manualIconName: data.iconSettings.manualIconName,
+                    fallbackToColorIcon: data.iconSettings.fallbackToColorIcon
+                } : undefined
             };
 
             // Save the schema
@@ -214,6 +225,51 @@ export class AddSchemaWebview {
             }
         } catch (error) {
             console.error('File browser error:', error);
+        }
+    }
+
+    /**
+     * Send popular icons to the webview
+     */
+    private sendPopularIcons() {
+        try {
+            const popularIcons = getPopularIcons();
+            this.panel?.webview.postMessage({
+                command: 'popularIconsLoaded',
+                icons: popularIcons
+            });
+        } catch (error: any) {
+            this.panel?.webview.postMessage({
+                command: 'popularIconsLoaded',
+                icons: [],
+                error: error?.message ?? 'Failed to load popular icons'
+            });
+        }
+    }
+
+    /**
+     * Search for icons matching the query
+     */
+    private searchIcons(query: string) {
+        try {
+            const allIcons = getAllAvailableIcons();
+            const filteredIcons = allIcons.filter(icon => 
+                icon.title.toLowerCase().includes(query.toLowerCase()) ||
+                icon.slug.toLowerCase().includes(query.toLowerCase())
+            ).slice(0, 50); // Limit results
+
+            this.panel?.webview.postMessage({
+                command: 'iconSearchResults',
+                icons: filteredIcons,
+                query: query
+            });
+        } catch (error: any) {
+            this.panel?.webview.postMessage({
+                command: 'iconSearchResults',
+                icons: [],
+                query: query,
+                error: error?.message ?? 'Failed to search icons'
+            });
         }
     }
 
@@ -376,13 +432,98 @@ export class AddSchemaWebview {
         .color-option:focus:not(:focus-visible) {
             outline: none;
         }
-        
-        .color-blue { background-color: #007ACC; }
+          .color-blue { background-color: #007ACC; }
         .color-green { background-color: #28A745; }
         .color-orange { background-color: #FD7E14; }
         .color-purple { background-color: #6F42C1; }
         .color-red { background-color: #DC3545; }
         .color-yellow { background-color: #FFC107; }
+        
+        .icon-choice-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        .icon-choice-option {
+            display: flex;
+            align-items: flex-start;
+            padding: 12px;
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background-color: var(--vscode-input-background);
+        }
+        
+        .icon-choice-option:hover {
+            border-color: var(--vscode-focusBorder);
+            background-color: var(--vscode-list-hoverBackground);
+        }
+        
+        .icon-choice-option input[type="radio"] {
+            margin-right: 10px;
+            margin-top: 2px;
+        }
+        
+        .icon-choice-option span {
+            font-weight: 500;
+            display: block;
+            margin-bottom: 4px;
+        }
+        
+        .icon-choice-hint {
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+            margin-left: 20px;
+        }
+        
+        .icon-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 10px;
+            max-height: 250px;
+            overflow-y: auto;
+            border: 1px solid var(--vscode-panel-border);
+            padding: 10px;
+            border-radius: 4px;
+            background-color: var(--vscode-input-background);
+        }
+        
+        .icon-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .icon-item:hover {
+            background: var(--vscode-list-hoverBackground);
+            border-color: var(--vscode-focusBorder);
+        }
+        
+        .icon-item.selected {
+            background: var(--vscode-list-activeSelectionBackground);
+            border-color: var(--vscode-focusBorder);
+        }
+        
+        .icon-item svg {
+            width: 24px;
+            height: 24px;
+            fill: var(--vscode-foreground);
+        }
+        
+        .icon-item .icon-title {
+            font-size: 10px;
+            text-align: center;
+            margin-top: 4px;
+            word-break: break-word;
+        }
         
         .buttons {
             display: flex;
@@ -514,9 +655,58 @@ export class AddSchemaWebview {
                     <div class="color-option color-orange" data-color="orange" title="Orange" role="button" aria-label="Select orange color theme" tabindex="0"></div>
                     <div class="color-option color-purple" data-color="purple" title="Purple" role="button" aria-label="Select purple color theme" tabindex="0"></div>
                     <div class="color-option color-red" data-color="red" title="Red" role="button" aria-label="Select red color theme" tabindex="0"></div>
-                    <div class="color-option color-yellow" data-color="yellow" title="Yellow" role="button" aria-label="Select yellow color theme" tabindex="0"></div>
-                </div>
+                    <div class="color-option color-yellow" data-color="yellow" title="Yellow" role="button" aria-label="Select yellow color theme" tabindex="0"></div>                </div>
                 <div class="hint">Choose a color for visual identification in the tree view</div>
+            </div>
+            
+            <div class="form-group">
+                <label>Brand Icon</label>
+                <div class="icon-choice-group">
+                    <label class="icon-choice-option">
+                        <input type="radio" name="iconChoice" value="auto" checked>
+                        <span>🤖 Auto-detect brand icon</span>
+                        <div class="icon-choice-hint">Automatically find the best icon based on schema content</div>
+                    </label>
+                    
+                    <label class="icon-choice-option">
+                        <input type="radio" name="iconChoice" value="manual">
+                        <span>🎯 Choose specific icon</span>
+                        <div class="icon-choice-hint">Select from thousands of brand icons</div>
+                    </label>
+                    
+                    <label class="icon-choice-option">
+                        <input type="radio" name="iconChoice" value="none">
+                        <span>🚫 No brand icon</span>
+                        <div class="icon-choice-hint">Use only color-coded icons</div>
+                    </label>
+                </div>
+                
+                <div id="iconSelectionArea" style="display: none; margin-top: 15px;">
+                    <div class="form-group">
+                        <input type="text" id="iconSearch" placeholder="Search icons..." style="margin-bottom: 10px;">
+                    </div>
+                    <div id="popularIcons">
+                        <h4 style="margin: 10px 0;">Popular Icons:</h4>
+                        <div id="popularIconGrid" class="icon-grid"></div>
+                    </div>
+                    <div id="searchResults" style="display: none;">
+                        <h4 style="margin: 10px 0;">Search Results:</h4>
+                        <div id="searchResultsGrid" class="icon-grid"></div>
+                    </div>
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="selectedIconName">Selected Icon:</label>
+                        <input type="text" id="selectedIconName" readonly placeholder="No icon selected">
+                    </div>
+                </div>
+                
+                <div class="form-group" style="margin-top: 10px;">
+                    <label>
+                        <input type="checkbox" id="fallbackToColor" checked>
+                        <span>Use fallback color icon when brand icon is not available</span>
+                    </label>
+                </div>
+                
+                <div class="hint">Brand icons help visually identify different APIs and services</div>
             </div>
         </form>
         
@@ -545,10 +735,15 @@ export class AddSchemaWebview {
         const loadingMessage = document.getElementById('loadingMessage');
         const submitButton = document.getElementById('submitButton');
         const cancelButton = document.getElementById('cancelButton');
-        
-        // State
+          // State
         let selectedSourceType = 'url';
         let selectedColor = 'blue';
+        let selectedIconChoice = 'auto';
+        let selectedIconName = '';
+        let fallbackToColor = true;
+        
+        // Initialize icon management
+        initializeIconManagement();
         
         // Source type selection
         document.querySelectorAll('.source-type-option').forEach(option => {
@@ -628,13 +823,17 @@ export class AddSchemaWebview {
         // Form submission
         form.addEventListener('submit', (e) => {
             e.preventDefault();
-            
-            const formData = {
+              const formData = {
                 name: nameInput.value.trim(),
                 description: descriptionInput.value.trim(),
                 source: sourceInput.value.trim(),
                 sourceType: selectedSourceType,
-                color: selectedColor
+                color: selectedColor,
+                iconSettings: selectedIconChoice !== 'auto' ? {
+                    useBrandIcon: selectedIconChoice !== 'none',
+                    manualIconName: selectedIconChoice === 'manual' ? selectedIconName : undefined,
+                    fallbackToColorIcon: fallbackToColor
+                } : undefined
             };
             
             // Basic validation
@@ -662,8 +861,7 @@ export class AddSchemaWebview {
         // Message handling
         window.addEventListener('message', event => {
             const message = event.data;
-            
-            switch (message.command) {
+              switch (message.command) {
                 case 'setLoading':
                     setLoading(message.loading, message.message);
                     break;
@@ -676,6 +874,20 @@ export class AddSchemaWebview {
                 case 'setFilePath':
                     sourceInput.value = message.path;
                     clearValidation();
+                    break;
+                case 'popularIconsLoaded':
+                    if (message.icons && message.icons.length > 0) {
+                        renderIconGrid(message.icons, 'popularIconGrid');
+                    } else {
+                        document.getElementById('popularIconGrid').innerHTML = '<p style="text-align: center; color: var(--vscode-descriptionForeground);">No popular icons available</p>';
+                    }
+                    break;
+                case 'iconSearchResults':
+                    if (message.icons && message.icons.length > 0) {
+                        renderIconGrid(message.icons, 'searchResultsGrid');
+                    } else {
+                        document.getElementById('searchResultsGrid').innerHTML = '<p style="text-align: center; color: var(--vscode-descriptionForeground);">No icons found for "' + message.query + '"</p>';
+                    }
                     break;
             }
         });
@@ -710,6 +922,90 @@ export class AddSchemaWebview {
             }
         }
         
+        // Icon management functions
+        function initializeIconManagement() {
+            // Set up icon choice listeners
+            document.querySelectorAll('input[name="iconChoice"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    selectedIconChoice = this.value;
+                    if (this.value === 'manual') {
+                        showIconSelection();
+                    } else {
+                        hideIconSelection();
+                    }
+                });
+            });
+            
+            // Set up fallback checkbox
+            const fallbackCheckbox = document.getElementById('fallbackToColor');
+            fallbackCheckbox.addEventListener('change', function() {
+                fallbackToColor = this.checked;
+            });
+            
+            // Set up search functionality
+            const searchInput = document.getElementById('iconSearch');
+            let searchTimeout;
+            searchInput.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    if (this.value.trim()) {
+                        vscode.postMessage({
+                            command: 'searchIcons',
+                            query: this.value.trim()
+                        });
+                        document.getElementById('searchResults').style.display = 'block';
+                    } else {
+                        document.getElementById('searchResults').style.display = 'none';
+                    }
+                }, 300);
+            });
+            
+            // Load popular icons initially
+            vscode.postMessage({ command: 'getPopularIcons' });
+        }
+        
+        function showIconSelection() {
+            document.getElementById('iconSelectionArea').style.display = 'block';
+        }
+        
+        function hideIconSelection() {
+            document.getElementById('iconSelectionArea').style.display = 'none';
+        }
+        
+        function selectIcon(slug, svg, title) {
+            // Clear previous selections
+            document.querySelectorAll('.icon-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            
+            // Mark new selection
+            event.target.closest('.icon-item').classList.add('selected');
+            
+            // Update selected icon
+            selectedIconName = slug;
+            document.getElementById('selectedIconName').value = slug;
+            document.querySelector('input[name="iconChoice"][value="manual"]').checked = true;
+            selectedIconChoice = 'manual';
+        }
+        
+        function renderIconGrid(icons, containerId) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            icons.forEach(icon => {
+                const iconItem = document.createElement('div');
+                iconItem.className = 'icon-item';
+                iconItem.onclick = () => selectIcon(icon.slug, icon.svg, icon.title);
+                
+                iconItem.innerHTML = \`
+                    <div>\${icon.svg}</div>
+                    <div class="icon-title">\${icon.title}</div>
+                \`;
+                
+                container.appendChild(iconItem);
+            });
+        }
+
         // Focus first input
         nameInput.focus();
     </script>

@@ -29,8 +29,6 @@ import { AddSchemaWebview } from './webviews/add-schema-form';
 import { AddEnvironmentWebview } from './webviews/add-environment-form';
 import { AddEnvironmentGroupWebview } from './webviews/add-environment-group-form';
 import { EditEnvironmentGroupWebview } from './webviews/edit-environment-group-form';
-import { AddSchemaEnvironmentWebview } from './webviews/add-schema-environment-form';
-import { AddSchemaEnvironmentGroupWebview } from './webviews/add-schema-environment-group-form';
 import { AddEnvironmentToGroupWebview } from './webviews/add-environment-to-group-form';
 import { EditEnvironmentWebview } from './webviews/edit-environment-form';
 import { SchemaManagementWebview } from './schema-management-webview';
@@ -406,10 +404,9 @@ function registerCommands(context: vscode.ExtensionContext) {
         'pathfinder.addEnvironmentToGroup',
         (group: any, schema: any) => addEnvironmentToGroupHandler2(group, schema, context)
     );
-    
-    const editEnvironmentGroupCommand = vscode.commands.registerCommand(
+      const editEnvironmentGroupCommand = vscode.commands.registerCommand(
         'pathfinder.editEnvironmentGroup',
-        (group: any) => editEnvironmentGroupHandler(group, context)
+        (group: any) => editGroupHandler(group, context)
     );
 
     // ========================
@@ -1484,25 +1481,25 @@ async function editSchemaGroupHandler(group: any) {
  */
 async function addSchemaEnvironmentGroupHandler(schema: any, context: vscode.ExtensionContext) {
     try {
-        console.log('Opening add schema environment group webview form...');
+        console.log('Opening add environment group webview form...');
         
-        // Create and show the add schema environment group webview form
-        const addSchemaEnvironmentGroupWebview = new AddSchemaEnvironmentGroupWebview(
+        // Use the same robust AddEnvironmentGroupWebview that already has auth support
+        const addGroupWebview = new AddEnvironmentGroupWebview(
             context,
             configManager,
-            schema,
+            schema.id,  // Pass the schema ID directly
             () => {
                 // Callback when group is added - refresh the tree
                 treeProvider.refresh();
             }
         );
         
-        await addSchemaEnvironmentGroupWebview.show();
+        await addGroupWebview.show();
         await updateWelcomeContext();
         
     } catch (error) {
-        console.error('Failed to open add schema environment group form:', error);
-        vscode.window.showErrorMessage(`Failed to open add schema environment group form: ${error}`);
+        console.error('Failed to open add environment group form:', error);
+        vscode.window.showErrorMessage(`Failed to open add environment group form: ${error}`);
     }
 }
 
@@ -1531,33 +1528,6 @@ async function addEnvironmentToGroupHandler2(group: any, schema: any, context: v
     } catch (error) {
         console.error('Failed to open add environment to group form:', error);
         vscode.window.showErrorMessage(`Failed to open add environment to group form: ${error}`);
-    }
-}
-
-/**
- * Command to edit an environment group
- */
-async function editEnvironmentGroupHandler(group: any, context: vscode.ExtensionContext) {
-    try {
-        console.log('Opening edit environment group webview form...');
-        
-        // Create and show the edit environment group webview form
-        const editEnvironmentGroupWebview = new EditEnvironmentGroupWebview(
-            context,
-            configManager,
-            group,
-            () => {
-                // Callback when group is updated - refresh the tree
-                treeProvider.refresh();
-            }
-        );
-        
-        await editEnvironmentGroupWebview.show();
-        await updateWelcomeContext();
-        
-    } catch (error) {
-        console.error('Failed to open edit environment group form:', error);
-        vscode.window.showErrorMessage(`Failed to open edit environment group form: ${error}`);
     }
 }
 
@@ -1880,20 +1850,20 @@ async function manageSchemaHandler(schema: any, context: vscode.ExtensionContext
  */
 async function addEnvironmentForSchemaHandler(schema: any, context: vscode.ExtensionContext) {
     try {
-        console.log('Opening add schema environment webview form...');
+        console.log('Opening add environment webview form...');
         
-        // Create and show the add schema environment webview form
-        const addSchemaEnvironmentWebview = new AddSchemaEnvironmentWebview(
+        // Use the same robust AddEnvironmentWebview that already works well
+        const addEnvironmentWebview = new AddEnvironmentWebview(
             context,
             configManager,
-            schema,
+            schema.id,
             () => {
                 // Callback when environment is added - refresh the tree
                 treeProvider.refresh();
             }
         );
         
-        await addSchemaEnvironmentWebview.show();
+        await addEnvironmentWebview.show();
         await updateWelcomeContext();
         
     } catch (error) {
