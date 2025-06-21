@@ -43,20 +43,20 @@ export class HttpRequestExecutor {
 
     /**
      * Executes a parsed HTTP request
-     */
-    async executeRequest(request: ParsedHttpRequest): Promise<HttpExecutionResult> {
+     */    async executeRequest(request: ParsedHttpRequest): Promise<HttpExecutionResult> {
         const start = Date.now();
-          try {
+        try {
             // Apply authentication
             const authenticatedRequest = await this.applyAuthentication(request);
             
             // Make the HTTP request
             const response = await this.makeHttpRequest(authenticatedRequest);
+              const responseData = await this.parseResponseData(response);
+            const responseHeaders = this.extractHeaders(response);
+            const fullContentType = responseHeaders['content-type'] || '';
+            const contentType = fullContentType.split(';')[0].trim(); // Extract just the media type
             
             const end = Date.now();
-            const responseData = await this.parseResponseData(response);
-            const responseHeaders = this.extractHeaders(response);
-            const contentType = responseHeaders['content-type'] || '';
             
             return {
                 status: response.status,

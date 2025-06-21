@@ -2,20 +2,16 @@ import * as vscode from 'vscode';
 import * as assert from 'assert';
 
 suite('Pathfinder - OpenAPI Explorer Test Suite', () => {
-    vscode.window.showInformationMessage('Start all tests.');
-
-    test('Extension should be present', () => {
-        const extension = vscode.extensions.getExtension('pathfinder.pathfinder-openapi-explorer');
+    vscode.window.showInformationMessage('Start all tests.');    test('Extension should be present', () => {
+        const extension = vscode.extensions.getExtension('ASHURTECHNET.pathfinder-openapi-explorer');
         assert.ok(extension);
-    });
-
-    test('Extension should activate', async () => {
-        const extension = vscode.extensions.getExtension('pathfinder.pathfinder-openapi-explorer');
+    });    test('Extension should activate', async () => {
+        const extension = vscode.extensions.getExtension('ASHURTECHNET.pathfinder-openapi-explorer');
         if (extension) {
             await extension.activate();
             assert.ok(extension.isActive);
         }
-    });    test('Commands should be registered', async () => {
+    });test('Commands should be registered', async () => {
         const commands = await vscode.commands.getCommands(true);
         
         const expectedCommands = [

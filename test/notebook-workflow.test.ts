@@ -27,6 +27,11 @@ const mockVscode = {
         Collapsed: 1,
         Expanded: 2
     },
+    EventEmitter: class {
+        event = jest.fn();
+        fire = jest.fn();
+        dispose = jest.fn();
+    },
     notebooks: {
         createNotebookController: jest.fn().mockReturnValue({
             supportedLanguages: [],
@@ -56,9 +61,9 @@ const mockVscode = {
     },
     NotebookCellOutput: class {
         constructor(public outputs: any[]) {}
-    },
-    NotebookCellOutputItem: {
-        text: jest.fn().mockReturnValue({ mime: 'text/plain', data: 'test' })
+    },    NotebookCellOutputItem: {
+        text: jest.fn().mockReturnValue({ mime: 'text/plain', data: 'test' }),
+        error: jest.fn().mockReturnValue({ mime: 'application/vnd.code.notebook.error', data: 'error' })
     },
     commands: {
         registerCommand: jest.fn()

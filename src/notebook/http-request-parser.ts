@@ -29,18 +29,22 @@ export class HttpRequestParser {
         // Substitute variables first
         const substitutedContent = this.substituteVariables(content, variables);
         const lines = substitutedContent.split('\n');
-        
-        // Get non-comment lines for parsing structure
+          // Get non-comment lines for parsing structure
         const nonCommentLines = this.filterNonCommentLines(lines);
         if (nonCommentLines.length === 0) {
             throw new Error('No request line found');
         }
+          // Find first non-empty line for request line
+        const requestLineIndex = nonCommentLines.findIndex(item => item.line.trim() !== '');
+        if (requestLineIndex === -1) {
+            throw new Error('No request line found');
+        }
         
         // Parse request line
-        const { method, url } = this.parseRequestLine(nonCommentLines[0].line);
+        const { method, url } = this.parseRequestLine(nonCommentLines[requestLineIndex].line);
         
         // Parse headers and find body start
-        const { headers, bodyStartIndex } = this.parseHeaders(nonCommentLines);
+        const { headers, bodyStartIndex } = this.parseHeaders(nonCommentLines, requestLineIndex);
         
         // Parse body preserving original formatting
         const body = this.parseBody(lines, bodyStartIndex);
@@ -51,33 +55,31 @@ export class HttpRequestParser {
             headers,
             body
         };
-    }
-
-    /**
-     * Filters out comment-only lines and returns line info
+    }    /**
+     * Filters out comment-only lines and returns line info, preserving empty lines for header parsing
      */
     private filterNonCommentLines(lines: string[]): { line: string; originalIndex: number }[] {
         const nonCommentLines: { line: string; originalIndex: number }[] = [];
         lines.forEach((line, index) => {
             const trimmed = line.trim();
-            if (trimmed && !trimmed.startsWith('#')) {
+            // Keep empty lines (for header/body separation) and non-comment lines
+            if (trimmed === '' || !trimmed.startsWith('#')) {
                 nonCommentLines.push({ line: trimmed, originalIndex: index });
             }
         });
         return nonCommentLines;
-    }
-
-    /**
+    }    /**
      * Parses headers and determines body start index
      */
-    private parseHeaders(nonCommentLines: { line: string; originalIndex: number }[]): {
+    private parseHeaders(nonCommentLines: { line: string; originalIndex: number }[], requestLineIndex: number): {
         headers: Record<string, string>;
         bodyStartIndex: number;
     } {
         const headers: Record<string, string> = {};
         let bodyStartIndex = -1;
         
-        for (let i = 1; i < nonCommentLines.length; i++) {
+        // Start after the request line
+        for (let i = requestLineIndex + 1; i < nonCommentLines.length; i++) {
             const lineItem = nonCommentLines[i];
             const line = lineItem.line;
             
@@ -85,7 +87,7 @@ export class HttpRequestParser {
                 bodyStartIndex = lineItem.originalIndex + 1;
                 break;
             }
-              if (line.includes(':')) {
+            if (line.includes(':')) {
                 const colonIndex = line.indexOf(':');
                 const key = line.substring(0, colonIndex).trim();
                 let value = line.substring(colonIndex + 1).trim();

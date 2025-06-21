@@ -2,7 +2,7 @@
   "name": "pathfinder-openapi-explorer",
   "displayName": "Pathfinder - OpenAPI Explorer",
   "description": "Explore, test, and generate code for OpenAPI/REST APIs with intelligent platform detection",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": "ASHURTECHNET",
   "icon": "pathfinder.png",
   "repository": {

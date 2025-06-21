@@ -92,16 +92,16 @@ export class NotebookController {
         };        const notebook = await vscode.workspace.openNotebookDocument('pathfinder-http-notebook', notebookData);
         
         return notebook;
-    }
-
-    /**
+    }    /**
      * Alias for createNotebookFromEndpoint to match test expectations
      */
     async createNotebookForEndpoint(
         endpoint: EndpointInfo,
         environment: SchemaEnvironment
     ): Promise<vscode.NotebookDocument> {
-        return this.createNotebookFromEndpoint(endpoint, 'default', environment.id);
+        const notebook = await this.createNotebookFromEndpoint(endpoint, 'default', environment.id);
+        await this.openNotebook(notebook);
+        return notebook;
     }
 
     /**
@@ -429,9 +429,7 @@ export class NotebookController {
      */
     dispose(): void {
         this.controller.dispose();
-    }
-
-    /**
+    }    /**
      * Executes multiple cells as expected by tests
      */
     async executeCells(
@@ -439,12 +437,20 @@ export class NotebookController {
         execution: vscode.NotebookCellExecution,
         context?: VariableContext
     ): Promise<void> {
+        execution.start(Date.now());
+        
         if (context) {
             this.variableContext = { ...this.variableContext, ...context };
         }
 
-        for (const cell of cells) {
-            await this.executeSingleCell(cell, cell.notebook);
+        try {
+            for (const cell of cells) {
+                await this.executeSingleCell(cell, cell.notebook);
+            }
+            execution.end(true, Date.now());
+        } catch (error) {
+            execution.end(false, Date.now());
+            throw error;
         }
     }
 
