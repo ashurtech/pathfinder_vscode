@@ -66,9 +66,7 @@ export class NotebookController {
 
         // Register the controller
         this.context.subscriptions.push(this.controller);
-    }
-
-    /**
+    }    /**
      * Creates a new notebook document from an API endpoint
      */
     async createNotebookFromEndpoint(
@@ -76,6 +74,9 @@ export class NotebookController {
         schemaId: string,
         environmentId?: string
     ): Promise<vscode.NotebookDocument> {
+        // Initialize variable context with environment data
+        await this.initializeVariableContext(schemaId, environmentId);
+        
         const cells = await this.generateCellsForEndpoint(endpoint, schemaId, environmentId);
         
         const notebookData = new vscode.NotebookData(cells);
@@ -92,7 +93,7 @@ export class NotebookController {
         };        const notebook = await vscode.workspace.openNotebookDocument('pathfinder-http-notebook', notebookData);
         
         return notebook;
-    }    /**
+    }/**
      * Alias for createNotebookFromEndpoint to match test expectations
      */
     async createNotebookForEndpoint(
@@ -263,14 +264,13 @@ export class NotebookController {
                 `## Environment\n\nCurrent: ${environmentId ? environments.find(e => e.id === environmentId)?.name ?? 'Unknown' : 'None selected'}`,
                 'markdown'
             ));
-        }
-
-        // Add variables cell
+        }        // Add variables cell with current context values
+        const variablesJson = JSON.stringify(this.variableContext, null, 2);
         cells.push(new vscode.NotebookCellData(
             vscode.NotebookCellKind.Code,
-            '{\n  "baseUrl": "{{baseUrl}}",\n  "apiKey": "{{apiKey}}"\n}',
+            variablesJson || '{\n  "baseUrl": "{{baseUrl}}",\n  "apiKey": "{{apiKey}}"\n}',
             'json'
-        ));        // Add HTTP request cell
+        ));// Add HTTP request cell
         const httpRequest = this.generateHttpRequest(endpoint, environmentId);
         cells.push(new vscode.NotebookCellData(
             vscode.NotebookCellKind.Code,
@@ -553,5 +553,47 @@ export class NotebookController {
         }
         
         return details;
+    }    /**
+     * Initializes the variable context with environment data
+     */
+    private async initializeVariableContext(schemaId: string, environmentId?: string): Promise<void> {
+        if (!environmentId) {
+            return;
+        }
+
+        try {
+            const environment = await this.configManager.getSchemaEnvironment(environmentId);
+            if (environment) {
+                // Set baseUrl from environment
+                this.variableContext = {
+                    ...this.variableContext,
+                    baseUrl: environment.baseUrl
+                };
+
+                // Get credentials if available
+                const credentials = await this.configManager.getCredentials(environment);
+                if (credentials) {
+                    if (credentials.apiKey) {
+                        this.variableContext.apiKey = credentials.apiKey;
+                    }
+                    if (credentials.username && credentials.password) {
+                        this.variableContext.username = credentials.username;
+                        this.variableContext.password = credentials.password;
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to initialize variable context:', error);
+        }
+    }
+
+    /**
+     * Restores variable context when opening an existing notebook
+     */
+    async restoreVariableContextFromNotebook(notebook: vscode.NotebookDocument): Promise<void> {
+        const metadata = notebook.metadata?.pathfinder;
+        if (metadata?.schemaId && metadata?.environmentId) {
+            await this.initializeVariableContext(metadata.schemaId, metadata.environmentId);
+        }
     }
 }
