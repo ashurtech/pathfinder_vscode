@@ -3,6 +3,10 @@
 out/**
 node_modules/**
 src/**
+docs/**
+tests/**
+jstests/**
+notes/**
 .gitignore
 .yarnrc
 esbuild.js
