@@ -1110,36 +1110,7 @@ ${formattedBody}
 
     getRequestHistoryProvider(): RequestHistoryProvider {
         return this.requestHistory;
-    }
-
-    getResponseViewer(): ResponseViewer {
+    }    getResponseViewer(): ResponseViewer {
         return this.responseViewer;
     }
-}
-
-export function activate(context: vscode.ExtensionContext) {
-    const configManager = new ConfigurationManager(context);
-    const httpRunner = new HttpRequestRunner(configManager);
-    const responseViewer = httpRunner.getResponseViewer();    // Register request history view
-    const requestHistoryProvider = httpRunner.getRequestHistoryProvider();
-    vscode.window.createTreeView('pathfinderRequestHistory', {
-        treeDataProvider: requestHistoryProvider,
-        showCollapseAll: true
-    });
-
-    // Register command to show request history item
-    context.subscriptions.push(
-        vscode.commands.registerCommand('pathfinder.showRequestHistory', (item: RequestHistoryItem) => {
-            responseViewer.showResponse(item.response, item.request);
-        })
-    );
-
-    // Register command to clear request history
-    context.subscriptions.push(
-        vscode.commands.registerCommand('pathfinder.clearRequestHistory', () => {
-            requestHistoryProvider.clearHistory();
-        })
-    );
-
-    // ... rest of activation code ...
 }

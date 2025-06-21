@@ -530,9 +530,7 @@ export class ConfigurationManager {
             schemaCount: schemas.length,
             environmentCount: environments.length
         };
-    }
-
-    // ========================
+    }    // ========================
     // Secret Storage Helper Methods
     // ========================
 
@@ -540,6 +538,10 @@ export class ConfigurationManager {
      * Store a secret value securely using VS Code's SecretStorage
      */
     async storeSecret(key: string, value: string): Promise<void> {
+        if (!this.context?.secrets) {
+            console.warn('Extension context or secrets API not available for storing secret');
+            return;
+        }
         await this.context.secrets.store(key, value);
     }
 
@@ -547,6 +549,10 @@ export class ConfigurationManager {
      * Get a secret value from VS Code's SecretStorage
      */
     async getSecret(key: string): Promise<string | undefined> {
+        if (!this.context?.secrets) {
+            console.warn('Extension context or secrets API not available for getting secret');
+            return undefined;
+        }
         return await this.context.secrets.get(key);
     }
 
@@ -554,6 +560,10 @@ export class ConfigurationManager {
      * Delete a secret from VS Code's SecretStorage
      */
     async deleteSecret(key: string): Promise<void> {
+        if (!this.context?.secrets) {
+            console.warn('Extension context or secrets API not available for deleting secret');
+            return;
+        }
         await this.context.secrets.delete(key);
     }
 
@@ -562,7 +572,12 @@ export class ConfigurationManager {
      * Returns undefined if no credentials are found
      */
     async getCredentials(environment: SchemaEnvironment): Promise<{ username?: string; password?: string; apiKey?: string } | undefined> {
-        try {
+        try {            // Check if context is available
+            if (!this.context?.secrets) {
+                console.warn('Extension context or secrets API not available for credential retrieval');
+                return undefined;
+            }
+
             // First check environment's own credentials
             if (environment.authSecretKey) {
                 const secret = await this.context.secrets.get(environment.authSecretKey);
@@ -587,11 +602,9 @@ export class ConfigurationManager {
             return undefined;
         } catch (error) {
             console.error('Failed to get credentials:', error);
-            throw new Error(`Failed to get credentials: ${error}`);
+            return undefined; // Return undefined instead of throwing
         }
-    }
-
-    /**
+    }    /**
      * Set credentials for an environment or group
      * @param target The environment or group to set credentials for
      * @param credentials The credentials to store
@@ -602,6 +615,11 @@ export class ConfigurationManager {
         credentials: { username?: string; password?: string; apiKey?: string }
     ): Promise<string> {
         try {
+            if (!this.context?.secrets) {
+                console.warn('Extension context or secrets API not available for setting credentials');
+                throw new Error('Secrets storage not available');
+            }
+
             // Generate a unique key for this secret
             const secretKey = `pathfinder_${target.id}_${Date.now()}`;
 
@@ -618,13 +636,16 @@ export class ConfigurationManager {
             console.error('Failed to set credentials:', error);
             throw new Error(`Failed to set credentials: ${error}`);
         }
-    }
-
-    /**
+    }    /**
      * Delete credentials for an environment or group
      */
     async deleteCredentials(target: SchemaEnvironment | SchemaEnvironmentGroup): Promise<void> {
         try {
+            if (!this.context?.secrets) {
+                console.warn('Extension context or secrets API not available for deleting credentials');
+                return;
+            }
+
             if (target.authSecretKey) {
                 await this.context.secrets.delete(target.authSecretKey);
             }
@@ -834,9 +855,11 @@ export class ConfigurationManager {
             if (message.command === 'saveCredentials') {
                 try {
                     let savedCount = 0;
-                    
-                    for (const [key, value] of Object.entries(message.credentials)) {
+                      for (const [key, value] of Object.entries(message.credentials)) {
                         if (value && typeof value === 'string' && value.trim() !== '') {
+                            if (!this.context?.secrets) {
+                                throw new Error('Secrets storage not available');
+                            }
                             await this.context.secrets.store(key, value.trim());
                             savedCount++;
                         }
@@ -917,14 +940,28 @@ export class ConfigurationManager {
             console.error('Error getting schema name for group:', error);
             return 'Unknown Schema';
         }
-    }
-
-    /**
+    }    /**
      * Check which environments and groups need credentials after import
      */
     async checkMissingCredentials(environments: SchemaEnvironment[], groups: SchemaEnvironmentGroup[]): Promise<{ missingEnvs: SchemaEnvironment[], missingGroups: SchemaEnvironmentGroup[] }> {
         const missingEnvs: SchemaEnvironment[] = [];
         const missingGroups: SchemaEnvironmentGroup[] = [];
+
+        if (!this.context?.secrets) {
+            console.warn('Extension context or secrets API not available for checking credentials');
+            // If secrets are not available, consider all auth-configured items as missing credentials
+            for (const env of environments) {
+                if (env.auth && env.authSecretKey) {
+                    missingEnvs.push(env);
+                }
+            }
+            for (const group of groups) {
+                if (group.defaultAuth && group.authSecretKey) {
+                    missingGroups.push(group);
+                }
+            }
+            return { missingEnvs, missingGroups };
+        }
 
         // Check environments that have auth configured but no credentials
         for (const env of environments) {

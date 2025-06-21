@@ -52,12 +52,18 @@ export async function activate(context: vscode.ExtensionContext) {
     schemaLoader = new SchemaLoader();
     httpRunner = new HttpRequestRunner(configManager);
     treeProvider = new ApiTreeProvider(configManager, schemaLoader);
-    
-    // Register the tree view with drag and drop support
+      // Register the tree view with drag and drop support
     const treeView = vscode.window.createTreeView('pathfinderExplorer', {
         treeDataProvider: treeProvider,
         showCollapseAll: true,
         dragAndDropController: treeProvider
+    });
+    
+    // Register request history view
+    const requestHistoryProvider = httpRunner.getRequestHistoryProvider();
+    const requestHistoryView = vscode.window.createTreeView('pathfinderRequestHistory', {
+        treeDataProvider: requestHistoryProvider,
+        showCollapseAll: true
     });
     
     // Register CodeLens provider for HTTP files
@@ -72,9 +78,19 @@ export async function activate(context: vscode.ExtensionContext) {
     
     // Register tree view commands
     registerTreeCommands(context);
+      // Add disposables to subscriptions
+    context.subscriptions.push(treeView, requestHistoryView, codeLensProviderDisposable);
     
-    // Add disposables to subscriptions
-    context.subscriptions.push(treeView, codeLensProviderDisposable);
+    // Register request history commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('pathfinder.showRequestHistory', (item) => {
+            const responseViewer = httpRunner.getResponseViewer();
+            responseViewer.showResponse(item.response, item.request);
+        }),
+        vscode.commands.registerCommand('pathfinder.clearRequestHistory', () => {
+            requestHistoryProvider.clearHistory();
+        })
+    );
     
     // Force migration to schema-first architecture (auto-migrate)
     await forceSchemaFirstMigration();
@@ -1089,6 +1105,11 @@ async function editGroupHandler(group: any, context: vscode.ExtensionContext) {
  * If missing, prompt the user and store them securely.
  */
 async function ensureEnvironmentSecrets(context: vscode.ExtensionContext, environment: any) {
+    if (!context?.secrets) {
+        console.warn('Extension context or secrets API not available');
+        return;
+    }
+    
     const auth = environment.auth ?? {};
     // API Key
     if (auth.type === 'apikey' && auth.apiKeySecret) {
