@@ -245,6 +245,12 @@
         "title": "Run in Request Notebook",
         "icon": "$(notebook)",
         "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.fixNotebookCellLanguages",
+        "title": "Fix Notebook Cell Languages",
+        "icon": "$(tools)",
+        "category": "Pathfinder"
       }
     ],
     "configuration": {

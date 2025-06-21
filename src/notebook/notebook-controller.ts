@@ -48,12 +48,11 @@ export class NotebookController {
     constructor(
         private readonly context: vscode.ExtensionContext,
         private readonly configManager: ConfigurationManager
-    ) {
-        // Create the notebook controller for HTTP requests
+    ) {        // Create the notebook controller for HTTP requests
         this.controller = vscode.notebooks.createNotebookController(
             'pathfinder-http-notebook',
             'pathfinder-http-notebook',
-            'Pathfinder HTTP Request Notebook'
+            'Pathfinder HTTP (▶️ Run Requests)'
         );
 
         this.controller.supportedLanguages = ['http', 'markdown', 'json'];
@@ -123,9 +122,7 @@ export class NotebookController {
         for (const cell of cells) {
             await this.executeSingleCell(cell, notebook);
         }
-    }
-
-    /**
+    }    /**
      * Executes a single cell based on its language
      */
     private async executeSingleCell(
@@ -136,6 +133,12 @@ export class NotebookController {
         execution.start(Date.now());
 
         try {
+            // Check if the cell is being executed with the correct controller
+            if (!this.isCellSupportedByController(cell)) {
+                await this.handleUnsupportedCell(cell, execution);
+                return;
+            }
+
             switch (cell.document.languageId) {
                 case 'http':
                     await this.executeHttpCell(cell, execution);
@@ -148,7 +151,7 @@ export class NotebookController {
                     await this.executeJsonCell(cell, execution);
                     break;
                 default:
-                    throw new Error(`Unsupported language: ${cell.document.languageId}`);
+                    await this.handleUnsupportedLanguage(cell, execution);
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
@@ -157,7 +160,117 @@ export class NotebookController {
             ]));
             execution.end(false, Date.now());
         }
+    }
+
+    /**
+     * Checks if a cell is supported by this controller
+     */
+    private isCellSupportedByController(cell: vscode.NotebookCell): boolean {
+        const supportedLanguages = ['http', 'markdown', 'json'];
+        return supportedLanguages.includes(cell.document.languageId);
+    }
+
+    /**
+     * Handles cells that are not supported by this controller
+     */
+    private async handleUnsupportedCell(
+        cell: vscode.NotebookCell,
+        execution: vscode.NotebookCellExecution
+    ): Promise<void> {
+        const language = cell.document.languageId;
+        const cellContent = cell.document.getText().trim();
+        
+        // Try to detect if this looks like an HTTP request
+        const looksLikeHttp = this.detectHttpContent(cellContent);
+        
+        let message = `❌ **Cell Language Issue**\n\n`;
+        message += `This cell has language '${language}' but the Pathfinder HTTP controller only supports: **http**, **json**, and **markdown**.\n\n`;
+        
+        if (looksLikeHttp) {
+            message += `🔍 **Detected HTTP Content**\n`;
+            message += `This cell appears to contain an HTTP request. To execute it:\n\n`;
+            message += `1. **Change the cell language to 'http'**: Click the language selector in the bottom-right of the cell and select 'HTTP'\n`;
+            message += `2. **Run the cell again**: Click the play button or press Ctrl+Enter\n\n`;
+            message += `💡 **Tip**: All HTTP request cells in Pathfinder notebooks should use the 'http' language for proper syntax highlighting and execution.`;
+        } else {
+            message += `**To fix this:**\n`;
+            message += `- For HTTP requests: Change cell language to **'http'**\n`;
+            message += `- For variables/JSON data: Change cell language to **'json'**\n`;
+            message += `- For documentation: Change cell language to **'markdown'**\n\n`;
+            message += `Click the language selector in the bottom-right corner of the cell to change it.`;
+        }
+
+        execution.replaceOutput([
+            new vscode.NotebookCellOutput([
+                vscode.NotebookCellOutputItem.text(message, 'text/markdown')
+            ])
+        ]);
+        execution.end(false, Date.now());
+    }
+
+    /**
+     * Handles cells with unsupported languages within our controller
+     */
+    private async handleUnsupportedLanguage(
+        cell: vscode.NotebookCell,
+        execution: vscode.NotebookCellExecution
+    ): Promise<void> {
+        const language = cell.document.languageId;
+        const cellContent = cell.document.getText().trim();
+        
+        let message = `⚠️ **Unsupported Language: '${language}'**\n\n`;
+        message += `The Pathfinder HTTP Notebook controller supports these languages:\n`;
+        message += `- **http**: For HTTP requests\n`;
+        message += `- **json**: For variables and JSON data\n`;
+        message += `- **markdown**: For documentation\n\n`;
+        
+        // Try to provide intelligent suggestions
+        if (this.detectHttpContent(cellContent)) {
+            message += `🔍 **Suggestion**: This looks like an HTTP request. Change the cell language to **'http'**.`;
+        } else if (this.detectJsonContent(cellContent)) {
+            message += `🔍 **Suggestion**: This looks like JSON data. Change the cell language to **'json'**.`;
+        } else {
+            message += `**To change the language**: Click the language selector in the bottom-right corner of the cell.`;
+        }
+
+        execution.replaceOutput([
+            new vscode.NotebookCellOutput([
+                vscode.NotebookCellOutputItem.text(message, 'text/markdown')
+            ])
+        ]);
+        execution.end(false, Date.now());
     }    /**
+     * Detects if content looks like an HTTP request
+     */
+    private detectHttpContent(content: string): boolean {
+        const trimmed = content.trim();
+        if (!trimmed) {
+            return false;
+        }
+        
+        // Check for HTTP methods at the start of the content
+        const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
+        const firstLine = trimmed.split('\n')[0].trim().toUpperCase();
+        
+        return httpMethods.some(method => firstLine.startsWith(method + ' '));
+    }
+
+    /**
+     * Detects if content looks like JSON
+     */
+    private detectJsonContent(content: string): boolean {
+        const trimmed = content.trim();
+        if (!trimmed) {
+            return false;
+        }
+        
+        try {
+            JSON.parse(trimmed);
+            return true;
+        } catch {
+            return false;
+        }
+    }/**
      * Executes an HTTP cell
      */
     private async executeHttpCell(
@@ -618,5 +731,81 @@ export class NotebookController {
         }
         
         return masked;
+    }
+
+    /**
+     * Automatically detects and fixes cell languages in a notebook
+     * This can be called as a command to help users fix language issues
+     */
+    async autoFixCellLanguages(notebook: vscode.NotebookDocument): Promise<void> {
+        const edit = new vscode.WorkspaceEdit();
+        let fixedCount = 0;
+
+        for (let i = 0; i < notebook.cellCount; i++) {
+            const cell = notebook.cellAt(i);
+            const content = cell.document.getText().trim();
+            const currentLanguage = cell.document.languageId;
+            
+            if (!content) {
+                continue; // Skip empty cells
+            }
+
+            let suggestedLanguage: string | null = null;
+
+            // Detect what language this cell should be
+            if (this.detectHttpContent(content)) {
+                suggestedLanguage = 'http';
+            } else if (this.detectJsonContent(content)) {
+                suggestedLanguage = 'json';
+            } else if (this.detectMarkdownContent(content)) {
+                suggestedLanguage = 'markdown';
+            }
+
+            // If we found a better language and it's different from current
+            if (suggestedLanguage && suggestedLanguage !== currentLanguage) {
+                const cellEdit = vscode.NotebookEdit.updateCellMetadata(i, {
+                    ...cell.metadata,
+                    languageId: suggestedLanguage
+                });
+                edit.set(notebook.uri, [cellEdit]);
+                fixedCount++;
+            }
+        }
+
+        if (fixedCount > 0) {
+            await vscode.workspace.applyEdit(edit);
+            vscode.window.showInformationMessage(
+                `Fixed ${fixedCount} cell language${fixedCount === 1 ? '' : 's'} in the notebook.`
+            );
+        } else {
+            vscode.window.showInformationMessage('No cell language issues found in this notebook.');
+        }
+    }
+
+    /**
+     * Detects if content looks like markdown
+     */
+    private detectMarkdownContent(content: string): boolean {
+        const trimmed = content.trim();
+        if (!trimmed) {
+            return false;
+        }
+        
+        // Check for common markdown patterns
+        const markdownPatterns = [
+            /^#{1,6}\s+/, // Headers
+            /^\*\*.*\*\*/, // Bold text
+            /^\*.*\*/, // Italic text
+            /^\[.*\]\(.*\)/, // Links
+            /^>\s+/, // Blockquotes
+            /^-\s+/, // Lists
+            /^\d+\.\s+/, // Numbered lists
+            /^```/ // Code blocks
+        ];
+
+        const lines = trimmed.split('\n');
+        const firstLine = lines[0];
+        
+        return markdownPatterns.some(pattern => pattern.test(firstLine));
     }
 }

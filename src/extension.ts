@@ -148,6 +148,28 @@ function registerCommands(context: vscode.ExtensionContext) {
         }
     );
 
+    const fixNotebookCellLanguagesCommand = vscode.commands.registerCommand(
+        'pathfinder.fixNotebookCellLanguages',
+        async () => {
+            const activeNotebook = vscode.window.activeNotebookEditor?.notebook;
+            if (!activeNotebook) {
+                vscode.window.showWarningMessage('No active notebook found. Please open a Pathfinder HTTP notebook first.');
+                return;
+            }
+
+            if (activeNotebook.notebookType !== 'pathfinder-http-notebook') {
+                vscode.window.showWarningMessage('This command only works with Pathfinder HTTP notebooks.');
+                return;
+            }
+
+            try {
+                await notebookController.autoFixCellLanguages(activeNotebook);
+            } catch (error) {
+                vscode.window.showErrorMessage(`Failed to fix cell languages: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+    );
+
     // ========================
     // Environment Management Commands
     // ========================
@@ -554,8 +576,7 @@ function registerCommands(context: vscode.ExtensionContext) {
         deleteSchemaEnvironmentGroupCommand,
         changeSchemaColorCommand,
         changeEnvironmentGroupColorCommand,
-        addSchemaToGroupCommand,
-        addSchemaEnvironmentGroupCommand,
+        addSchemaToGroupCommand,        addSchemaEnvironmentGroupCommand,
         addEnvironmentToGroupCommand2,
         editEnvironmentGroupCommand,
         migrateToSchemaFirstCommand,
@@ -564,7 +585,8 @@ function registerCommands(context: vscode.ExtensionContext) {
         renameGroupCommand,
         exportConfigurationCommand,
         importConfigurationCommand,
-        runInNotebookCommand
+        runInNotebookCommand,
+        fixNotebookCellLanguagesCommand
     );
 }
 
