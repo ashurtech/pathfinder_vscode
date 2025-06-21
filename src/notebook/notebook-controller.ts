@@ -13,6 +13,7 @@ import { ConfigurationManager } from '../configuration';
 import { EndpointInfo, SchemaEnvironment } from '../types';
 import { HttpRequestExecutor, HttpExecutionResult, ParsedHttpRequest } from './http-request-executor';
 import { HttpRequestParser } from './http-request-parser';
+import { NotebookRequestHistoryProvider } from './notebook-request-history';
 
 /**
  * Represents the structure of a notebook cell in our XML format
@@ -43,12 +44,17 @@ export class NotebookController {
     private readonly controller: vscode.NotebookController;
     private readonly httpExecutor: HttpRequestExecutor;
     private readonly httpParser: HttpRequestParser;
+    private readonly requestHistory: NotebookRequestHistoryProvider;
     private variableContext: VariableContext = {};
 
     constructor(
         private readonly context: vscode.ExtensionContext,
         private readonly configManager: ConfigurationManager
-    ) {        // Create the notebook controller for HTTP requests
+    ) {
+        // Initialize request history
+        this.requestHistory = new NotebookRequestHistoryProvider(context);
+        
+        // Create the notebook controller for HTTP requests
         this.controller = vscode.notebooks.createNotebookController(
             'pathfinder-http-notebook',
             'pathfinder-http-notebook',
@@ -273,11 +279,11 @@ export class NotebookController {
         }
     }    /**
      * Executes an HTTP cell
-     */
-    private async executeHttpCell(
+     */    private async executeHttpCell(
         cell: vscode.NotebookCell,
         execution: vscode.NotebookCellExecution
     ): Promise<void> {
+        const startTime = Date.now();
         const httpContent = cell.document.getText();
         const parsedRequest = this.httpParser.parseHttpRequest(httpContent, this.variableContext);
         
@@ -293,11 +299,23 @@ export class NotebookController {
         }
         
         const result = await this.httpExecutor.executeRequest(parsedRequest);
+        const executionDuration = Date.now() - startTime;
+        
+        // Track this request in history
+        const cellIndex = notebook?.getCells().indexOf(cell);
+        this.requestHistory.addToHistory(
+            parsedRequest,
+            result,
+            notebook,
+            cellIndex,
+            { ...this.variableContext },
+            executionDuration
+        );
         
         // Update variable context with response data
         if (result.data && typeof result.data === 'object') {
             this.variableContext = { ...this.variableContext, ...result.data };
-        }        // Create detailed outputs showing both request and response
+        }// Create detailed outputs showing both request and response
         const requestDetails = this.formatRequestDetails(parsedRequest);
         const responseDetails = this.formatResponseDetails(result);
 
@@ -857,9 +875,7 @@ export class NotebookController {
         } else {
             vscode.window.showInformationMessage('No cell language issues found in this notebook.');
         }
-    }
-
-    /**
+    }    /**
      * Detects if content looks like markdown
      */
     private detectMarkdownContent(content: string): boolean {
@@ -884,5 +900,12 @@ export class NotebookController {
         const firstLine = lines[0];
         
         return markdownPatterns.some(pattern => pattern.test(firstLine));
+    }
+
+    /**
+     * Get the notebook request history provider
+     */
+    getRequestHistoryProvider(): NotebookRequestHistoryProvider {
+        return this.requestHistory;
     }
 }

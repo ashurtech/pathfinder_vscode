@@ -203,18 +203,18 @@
         "command": "pathfinder.addEnvironmentToGroup",
         "title": "Add Environment to Group",
         "category": "Pathfinder"
-      },
-      {
-        "command": "pathfinder.runHttpRequest",
-        "title": "Run HTTP Request",
-        "icon": "$(play)",
-        "category": "Pathfinder"
-      },
-      {
-        "command": "pathfinder.executeHttpRequest",
-        "title": "Execute HTTP Request",
-        "category": "Pathfinder"
-      },
+      },      // DISABLED: Old HTTP request editor - keeping code for fallback but removing from UI
+      // {
+      //   "command": "pathfinder.runHttpRequest",
+      //   "title": "Run HTTP Request",
+      //   "icon": "$(play)",
+      //   "category": "Pathfinder"
+      // },
+      // {
+      //   "command": "pathfinder.executeHttpRequest",
+      //   "title": "Execute HTTP Request",
+      //   "category": "Pathfinder"
+      // },
       {
         "command": "pathfinder.toggleAuthVisibility",
         "title": "Toggle Authorization Visibility",
@@ -242,10 +242,17 @@
         "command": "pathfinder.factoryReset",
         "title": "Factory Reset (Remove All User Data)",
         "category": "Pathfinder"
-      },
-      {
+      },      {
         "command": "pathfinder.clearRequestHistory",
         "title": "Clear Request History"
+      },
+      {
+        "command": "pathfinder.clearNotebookHistory",
+        "title": "Clear Notebook History"
+      },
+      {
+        "command": "pathfinder.recreateRequestFromHistory",
+        "title": "Recreate Request in New Notebook"
       },
       {
         "command": "pathfinder.runInNotebook",
@@ -316,8 +323,7 @@
           }
         ]
       }
-    ],
-    "views": {
+    ],    "views": {
       "pathfinder-sidebar-view": [
         {
           "id": "pathfinderExplorer",
@@ -326,7 +332,12 @@
         },
         {
           "id": "pathfinderRequestHistory",
-          "name": "Request History"
+          "name": "Request History (Legacy)",
+          "when": "false"
+        },
+        {
+          "id": "pathfinderNotebookHistory",
+          "name": "Notebook Request History"
         }
       ]
     },
@@ -358,10 +369,14 @@
           "command": "pathfinder.importConfiguration",
           "when": "view == pathfinderExplorer",
           "group": "navigation@4"
-        },
-        {
+        },        {
           "command": "pathfinder.clearRequestHistory",
           "when": "view == pathfinderRequestHistory",
+          "group": "navigation"
+        },
+        {
+          "command": "pathfinder.clearNotebookHistory",
+          "when": "view == pathfinderNotebookHistory",
           "group": "navigation"
         }
       ],

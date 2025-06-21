@@ -356,8 +356,7 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
         const endpoint = endpointItem.endpoint;
         const schemaItem = endpointItem.schemaItem;
         const environment = endpointItem.environment;
-        
-        return [
+          return [
             new EndpointActionTreeItem(
                 '📋 View Full Details',
                 'Show complete endpoint information',
@@ -366,13 +365,14 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 [endpoint, schemaItem, environment]
             ),
             new GenerateCommandsFolderTreeItem(endpoint, schemaItem, environment),
-            new EndpointActionTreeItem(
-                '🚀 Run HTTP Request',
-                'Open HTTP request editor for this endpoint',
-                'pathfinder.runHttpRequest',
-                'play',
-                [endpoint, schemaItem, environment]
-            ),
+            // DISABLED: Old HTTP request editor - keeping code for fallback but removing from UI
+            // new EndpointActionTreeItem(
+            //     '🚀 Run HTTP Request',
+            //     'Open HTTP request editor for this endpoint',
+            //     'pathfinder.runHttpRequest',
+            //     'play',
+            //     [endpoint, schemaItem, environment]
+            // ),
             new EndpointActionTreeItem(
                 '📓 Run in Request Notebook',
                 'Open this endpoint in an interactive notebook editor',
