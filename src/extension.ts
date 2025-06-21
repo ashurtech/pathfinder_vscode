@@ -129,6 +129,35 @@ export async function activate(context: vscode.ExtensionContext) {
     console.log('✅ Pathfinder - OpenAPI Explorer is now active!');
 }
 
+// Missing handler functions - stubs for now
+async function deleteSchemaHandler(schema: any) {
+    vscode.window.showInformationMessage(`Delete schema functionality is not yet implemented for ${schema.name}`);
+}
+
+async function deleteSchemaEnvironmentHandler(environment: any) {
+    vscode.window.showInformationMessage(`Delete environment functionality is not yet implemented for ${environment.name}`);
+}
+
+async function deleteSchemaEnvironmentGroupHandler(group: any) {
+    vscode.window.showInformationMessage(`Delete group functionality is not yet implemented for ${group.name}`);
+}
+
+async function changeSchemaColorHandler(schema: any) {
+    vscode.window.showInformationMessage(`Change schema color functionality is not yet implemented for ${schema.name}`);
+}
+
+async function changeEnvironmentGroupColorHandler(group: any) {
+    vscode.window.showInformationMessage(`Change group color functionality is not yet implemented for ${group.name}`);
+}
+
+async function renameSchemaHandler(schema: any) {
+    vscode.window.showInformationMessage(`Rename schema functionality is not yet implemented for ${schema.name}`);
+}
+
+async function renameEnvironmentHandler(environment: any) {
+    vscode.window.showInformationMessage(`Rename environment functionality is not yet implemented for ${environment.name}`);
+}
+
 /**
  * Register all the commands that users can run
  * Commands are what show up in the Command Palette (Ctrl+Shift+P)
@@ -205,10 +234,9 @@ function registerCommands(context: vscode.ExtensionContext) {
         'pathfinder.showLoadSchemaOptions',
         (environment: ApiEnvironment) => showLoadSchemaOptionsCommand(environment)
     );
-    
-    const editEnvironmentCmd = vscode.commands.registerCommand(
+      const editEnvironmentCmd = vscode.commands.registerCommand(
         'pathfinder.editEnvironment',
-        (environment: SchemaEnvironment) => editEnvironmentHandler(environment, context)
+        (environment: SchemaEnvironment) => editGroupHandler(environment, context)
     );
     
     const duplicateEnvironmentCmd = vscode.commands.registerCommand(
@@ -356,20 +384,19 @@ function registerCommands(context: vscode.ExtensionContext) {
     const editSchemaGroupCommand = vscode.commands.registerCommand(
         'pathfinder.editSchemaGroup',
         (group: any) => editSchemaGroupHandler(group)
-    );
-      const editSchemaCommand = vscode.commands.registerCommand(
+    );    const editSchemaCommand = vscode.commands.registerCommand(
         'pathfinder.editSchema',
-        (schema: any) => editSchemaHandler(schema, context)
+        (schema: any) => editSchemaGroupHandler(schema)
     );
     
     const manageSchemaCommand = vscode.commands.registerCommand(
         'pathfinder.manageSchema',
-        (schema: any) => manageSchemaHandler(schema, context)
+        (schema: any) => loadNewSchemaHandler(schema?.name, schema?.description)
     );
     
     const addEnvironmentForSchemaCommand = vscode.commands.registerCommand(
         'pathfinder.addEnvironmentForSchema',
-        (schema: any) => addEnvironmentForSchemaHandler(schema, context)
+        (schema: any) => addSchemaEnvironmentGroupHandler(schema, context)
     );
     
     const deleteSchemaCommand = vscode.commands.registerCommand(
@@ -757,7 +784,7 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
  * Command to add a new API environment
  * This walks the user through setting up a new environment with authentication
  */
-async function addApiEnvironmentHandler(context: vscode.Extension.Context) {
+async function addApiEnvironmentHandler(context: vscode.ExtensionContext) {
     try {
         console.log('Opening add environment webview form...');
         
@@ -1138,7 +1165,7 @@ async function showStorageStatsHandler() {
 /**
  * Command to add a new environment group
  */
-async function addEnvironmentGroupHandler(context: vscode.Extension.Context) {
+async function addEnvironmentGroupHandler(context: vscode.ExtensionContext) {
     try {
         console.log('Opening add environment group webview form...');
         
@@ -1183,7 +1210,7 @@ async function addEnvironmentGroupHandler(context: vscode.Extension.Context) {
 /**
  * Command to edit an environment group
  */
-async function editGroupHandler(group: any, context: vscode.Extension.Context) {
+async function editGroupHandler(group: any, context: vscode.ExtensionContext) {
     try {
         console.log('Opening edit environment group webview form...');
         
@@ -1211,7 +1238,7 @@ async function editGroupHandler(group: any, context: vscode.Extension.Context) {
  * Ensure all required secrets for an environment are present in SecretStorage.
  * If missing, prompt the user and store them securely.
  */
-async function ensureEnvironmentSecrets(context: vscode.Extension.Context, environment: any) {
+async function ensureEnvironmentSecrets(context: vscode.ExtensionContext, environment: any) {
     if (!context?.secrets) {
         console.warn('Extension context or secrets API not available');
         return;
@@ -1334,7 +1361,7 @@ async function toggleAuthVisibilityCommand(documentUri: vscode.Uri) {
 /**
  * Command to add a new API schema in schema-first architecture
  */
-async function addApiSchemaHandler(context: vscode.Extension.Context) {
+async function addApiSchemaHandler(context: vscode.ExtensionContext) {
     try {
         console.log('Opening add schema webview form...');
         
@@ -1505,7 +1532,7 @@ async function editSchemaGroupHandler(group: any) {
 /**
  * Command to add a new environment group within a schema
  */
-async function addSchemaEnvironmentGroupHandler(schema: any, context: vscode.Extension.Context) {
+async function addSchemaEnvironmentGroupHandler(schema: any, context: vscode.ExtensionContext) {
     try {
         console.log('Opening add environment group webview form...');
         
@@ -1532,7 +1559,7 @@ async function addSchemaEnvironmentGroupHandler(schema: any, context: vscode.Ext
 /**
  * Command to add an environment to an environment group within a schema
  */
-async function addEnvironmentToGroupHandler2(group: any, schema: any, context: vscode.Extension.Context) {
+async function addEnvironmentToGroupHandler2(group: any, schema: any, context: vscode.ExtensionContext) {
     try {
         console.log('Opening add environment to group webview form...');
         
@@ -1850,26 +1877,6 @@ async function updateWelcomeContext() {
     }
 }
 
-                return 'Environment name cannot be empty';
-            }
-            return null;
-        }
-    });
-    
-    if (newName && newName !== environment.name) {
-        try {
-            environment.name = newName.trim();
-            await configManager.saveSchemaEnvironment(environment);
-            if (treeProvider) {
-                treeProvider.refresh();
-            }
-            vscode.window.showInformationMessage(`Environment renamed to "${newName}"`);
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to rename environment: ${error}`);
-        }
-    }
-}
-
 async function renameGroupHandler(group: any) {
     const newName = await vscode.window.showInputBox({
         prompt: 'Enter new group name',
@@ -1891,13 +1898,8 @@ async function renameGroupHandler(group: any) {
             }
             vscode.window.showInformationMessage(`Group renamed to "${newName}"`);
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to rename group: ${error}`);
-        }
+            vscode.window.showErrorMessage(`Failed to rename group: ${error}`);        }
     }
-}
-
-async function migrateToSchemaFirstHandler() {
-    vscode.window.showInformationMessage('Migration to schema-first architecture functionality is under development');
 }
 
 /**
