@@ -62,44 +62,101 @@ export class EditEnvironmentWebview {
             } catch {
                 await this.panel?.webview.postMessage({ command: 'showError', error: 'Please enter a valid URL' });
                 return;
-            }
-
-            // Prepare updated environment
+            }            // Prepare updated environment
             const updatedEnvironment: SchemaEnvironment = {
                 ...this.environment,
                 name: data.name.trim(),
                 baseUrl: data.baseUrl.trim(),
-                description: data.description?.trim() || undefined,
-                auth: { type: 'none' },
-                authSecretKey: undefined
+                description: data.description?.trim() || undefined
             };
 
-            // Handle authentication
-            if (data.authType && data.authType !== 'none') {
-                switch (data.authType) {
-                    case 'apikey':
-                        if (!data.apiKey?.trim()) { throw new Error('API Key is required for API Key authentication'); }
+            // Handle authentication - only clear existing auth if explicitly setting to none
+            if (!data.authType || data.authType === 'none') {
+                updatedEnvironment.auth = { type: 'none' };
+                // Clear existing credentials if switching to none
+                if (this.environment.authSecretKey) {
+                    await this.configManager.deleteCredentials(this.environment);
+                }
+                updatedEnvironment.authSecretKey = undefined;
+            } else {
+                // Handle non-none authentication types
+                switch (data.authType) {                    case 'apikey':
                         updatedEnvironment.auth = {
                             type: 'apikey',
                             apiKeyLocation: data.apiKeyLocation || 'header',
                             apiKeyName: data.apiKeyName?.trim() || 'X-API-Key'
                         };
-                        updatedEnvironment.authSecretKey = await this.configManager.setCredentials(updatedEnvironment, { apiKey: data.apiKey.trim() });
+                        // Clear old credentials before setting new ones
+                        if (this.environment.authSecretKey) {
+                            await this.configManager.deleteCredentials(this.environment);
+                        }
+                        // Only require new API key if no existing credentials
+                        if (!data.apiKey?.trim() && !this.environment.authSecretKey) {
+                            throw new Error('API Key is required for API Key authentication'); 
+                        }
+                        if (data.apiKey?.trim()) {
+                            updatedEnvironment.authSecretKey = await this.configManager.setCredentials(updatedEnvironment, { 
+                                apiKey: data.apiKey.trim() 
+                            });
+                        } else {
+                            // Keep existing credentials
+                            updatedEnvironment.authSecretKey = this.environment.authSecretKey;
+                        }
                         break;
                     case 'bearer':
-                        if (!data.bearerToken?.trim()) { throw new Error('Bearer token is required for Bearer Token authentication'); }
                         updatedEnvironment.auth = { type: 'bearer' };
-                        updatedEnvironment.authSecretKey = await this.configManager.setCredentials(updatedEnvironment, { apiKey: data.bearerToken.trim() });
+                        // Clear old credentials before setting new ones
+                        if (this.environment.authSecretKey) {
+                            await this.configManager.deleteCredentials(this.environment);
+                        }
+                        // Only require new token if no existing credentials
+                        if (!data.bearerToken?.trim() && !this.environment.authSecretKey) {
+                            throw new Error('Bearer token is required for Bearer Token authentication'); 
+                        }
+                        if (data.bearerToken?.trim()) {
+                            updatedEnvironment.authSecretKey = await this.configManager.setCredentials(updatedEnvironment, { 
+                                apiKey: data.bearerToken.trim() 
+                            });
+                        } else {
+                            // Keep existing credentials
+                            updatedEnvironment.authSecretKey = this.environment.authSecretKey;
+                        }
                         break;
                     case 'basic':
-                        if (!data.username?.trim() || !data.password?.trim()) { throw new Error('Username and password are required for Basic Authentication'); }
-                        updatedEnvironment.auth = { type: 'basic', username: data.username.trim() };
-                        updatedEnvironment.authSecretKey = await this.configManager.setCredentials(updatedEnvironment, { username: data.username.trim(), password: data.password.trim() });
+                        updatedEnvironment.auth = { type: 'basic', username: data.username?.trim() };
+                        // Clear old credentials before setting new ones
+                        if (this.environment.authSecretKey) {
+                            await this.configManager.deleteCredentials(this.environment);
+                        }
+                        // Only require new credentials if no existing credentials
+                        if ((!data.username?.trim() || !data.password?.trim()) && !this.environment.authSecretKey) {
+                            throw new Error('Username and password are required for Basic Authentication'); 
+                        }
+                        if (data.username?.trim() && data.password?.trim()) {
+                            updatedEnvironment.authSecretKey = await this.configManager.setCredentials(updatedEnvironment, { 
+                                username: data.username.trim(), 
+                                password: data.password.trim() 
+                            });
+                        } else if (data.username?.trim() && !data.password?.trim() && this.environment.authSecretKey) {
+                            // Username changed but password empty - update username but keep existing password
+                            const existingCreds = await this.configManager.getCredentials(this.environment);
+                            if (existingCreds?.password) {
+                                updatedEnvironment.authSecretKey = await this.configManager.setCredentials(updatedEnvironment, { 
+                                    username: data.username.trim(), 
+                                    password: existingCreds.password 
+                                });
+                            } else {
+                                throw new Error('Password is required for Basic Authentication');
+                            }
+                        } else {
+                            // Keep existing credentials
+                            updatedEnvironment.authSecretKey = this.environment.authSecretKey;
+                        }
                         break;
                 }
             }
 
-            await this.configManager.saveApiEnvironment(updatedEnvironment);
+            await this.configManager.saveSchemaEnvironment(updatedEnvironment);
             vscode.window.showInformationMessage(`Environment "${updatedEnvironment.name}" updated successfully!`);
             this.onEnvironmentUpdated();
             this.panel?.dispose();
@@ -383,15 +440,13 @@ export class EditEnvironmentWebview {
                 <textarea id="description" name="description" placeholder="Optional description for this environment...">${escapedDescription}</textarea>
                 <div class="help-text">Optional description to help identify this environment</div>
                 <div class="changed-indicator" id="descriptionChanged" style="display: none;">Modified</div>
-            </div>
-
-            <div class="form-group">
+            </div>            <div class="form-group">
                 <label for="authType">Authentication Type</label>
                 <select id="authType" name="authType">
-                    <option value="none">None</option>
-                    <option value="apikey">API Key</option>
-                    <option value="bearer">Bearer Token</option>
-                    <option value="basic">Basic Authentication</option>
+                    <option value="none"${authType === 'none' ? ' selected' : ''}>None</option>
+                    <option value="apikey"${authType === 'apikey' ? ' selected' : ''}>API Key</option>
+                    <option value="bearer"${authType === 'bearer' ? ' selected' : ''}>Bearer Token</option>
+                    <option value="basic"${authType === 'basic' ? ' selected' : ''}>Basic Authentication</option>
                 </select>
                 <div class="help-text">Select the authentication type for this environment</div>
                 <div class="changed-indicator" id="authTypeChanged" style="display: none;">Modified</div>
@@ -412,18 +467,16 @@ export class EditEnvironmentWebview {
                 <input type="text" id="apiKeyName" name="apiKeyName" value="${this.environment.auth?.apiKeyName || ''}" />
                 <div class="help-text">Enter the name for the API Key</div>
                 <div class="changed-indicator" id="apiKeyNameChanged" style="display: none;">Modified</div>
-            </div>
-
-            <div class="form-group">
+            </div>            <div class="form-group">
                 <label for="apiKey">API Key</label>
-                <input type="text" id="apiKey" name="apiKey" value="${this.environment.auth?.apiKey || ''}" />
+                <input type="password" id="apiKey" name="apiKey" placeholder="${this.environment.authSecretKey ? 'Leave empty to keep existing key' : 'Enter your API key'}" />
                 <div class="help-text">Enter the API Key for API Key authentication</div>
                 <div class="changed-indicator" id="apiKeyChanged" style="display: none;">Modified</div>
             </div>
 
             <div class="form-group">
                 <label for="bearerToken">Bearer Token</label>
-                <input type="text" id="bearerToken" name="bearerToken" value="${this.environment.auth?.bearerToken || ''}" />
+                <input type="password" id="bearerToken" name="bearerToken" placeholder="${this.environment.authSecretKey ? 'Leave empty to keep existing token' : 'Enter your bearer token'}" />
                 <div class="help-text">Enter the Bearer Token for Bearer Token authentication</div>
                 <div class="changed-indicator" id="bearerTokenChanged" style="display: none;">Modified</div>
             </div>
@@ -437,7 +490,7 @@ export class EditEnvironmentWebview {
 
             <div class="form-group">
                 <label for="password">Password</label>
-                <input type="password" id="password" name="password" value="${this.environment.auth?.password || ''}" />
+                <input type="password" id="password" name="password" placeholder="${this.environment.authSecretKey ? 'Leave empty to keep existing password' : 'Enter your password'}" />
                 <div class="help-text">Enter the password for Basic Authentication</div>
                 <div class="changed-indicator" id="passwordChanged" style="display: none;">Modified</div>
             </div>

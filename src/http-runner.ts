@@ -951,9 +951,7 @@ ${formattedBody}
             });
             
             // Store credentials securely for this document
-            const credentials: Record<string, string> = {};
-            
-            // For schema-first environments, get credentials from secrets storage
+            const credentials: Record<string, string> = {};            // For schema-first environments, get credentials from secrets storage
             if (environment.authSecretKey && environment.auth) {
                 try {
                     const storedCredentials = await this.configManager.getCredentials(environment);

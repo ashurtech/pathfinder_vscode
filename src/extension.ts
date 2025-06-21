@@ -1111,50 +1111,64 @@ async function ensureEnvironmentSecrets(context: vscode.ExtensionContext, enviro
     }
     
     const auth = environment.auth ?? {};
-    // API Key
-    if (auth.type === 'apikey' && auth.apiKeySecret) {
-        const existing = await context.secrets.get(auth.apiKeySecret);
-        if (!existing) {
-            const apiKey = await vscode.window.showInputBox({
-                prompt: `Enter API key for environment "${environment.name}"`,
-                password: true
-            });
-            if (apiKey) {
-                await context.secrets.store(auth.apiKeySecret, apiKey);
-            } else {
-                throw new Error('API key is required for this environment.');
+    
+    // Check if credentials already exist
+    if (environment.authSecretKey) {
+        try {
+            const existing = await context.secrets.get(environment.authSecretKey);
+            if (existing) {
+                return; // Credentials already exist
             }
+        } catch (error) {
+            console.warn('Error checking existing credentials:', error);
         }
     }
-    // Bearer Token
-    if (auth.type === 'bearer' && auth.bearerTokenSecret) {
-        const existing = await context.secrets.get(auth.bearerTokenSecret);
-        if (!existing) {
-            const token = await vscode.window.showInputBox({
-                prompt: `Enter bearer token for environment "${environment.name}"`,
-                password: true
-            });
-            if (token) {
-                await context.secrets.store(auth.bearerTokenSecret, token);
-            } else {
-                throw new Error('Bearer token is required for this environment.');
-            }
+    
+    // Need to prompt for credentials based on auth type
+    let credentials: { username?: string; password?: string; apiKey?: string } = {};
+    
+    if (auth.type === 'apikey') {
+        const apiKey = await vscode.window.showInputBox({
+            prompt: `Enter API key for environment "${environment.name}"`,
+            password: true
+        });
+        if (apiKey) {
+            credentials.apiKey = apiKey;
+        } else {
+            throw new Error('API key is required for this environment.');
         }
-    }
-    // Basic Auth Password
-    if (auth.type === 'basic' && auth.passwordSecret) {
-        const existing = await context.secrets.get(auth.passwordSecret);
-        if (!existing) {
-            const password = await vscode.window.showInputBox({
-                prompt: `Enter password for environment "${environment.name}"`,
-                password: true
-            });
-            if (password) {
-                await context.secrets.store(auth.passwordSecret, password);
-            } else {
-                throw new Error('Password is required for this environment.');
-            }
+    } else if (auth.type === 'bearer') {
+        const token = await vscode.window.showInputBox({
+            prompt: `Enter bearer token for environment "${environment.name}"`,
+            password: true
+        });
+        if (token) {
+            credentials.apiKey = token; // Bearer tokens are stored in apiKey field
+        } else {
+            throw new Error('Bearer token is required for this environment.');
         }
+    } else if (auth.type === 'basic') {
+        const username = await vscode.window.showInputBox({
+            prompt: `Enter username for environment "${environment.name}"`
+        });
+        if (!username) {
+            throw new Error('Username is required for basic authentication.');
+        }
+        
+        const password = await vscode.window.showInputBox({
+            prompt: `Enter password for environment "${environment.name}"`,
+            password: true
+        });
+        if (!password) {
+            throw new Error('Password is required for basic authentication.');
+        }
+        
+        credentials.username = username;
+        credentials.password = password;
+    }    // Store credentials using ConfigurationManager
+    if (Object.keys(credentials).length > 0) {
+        const secretKey = await configManager.setCredentials(environment, credentials);
+        environment.authSecretKey = secretKey;
     }
 }
 
