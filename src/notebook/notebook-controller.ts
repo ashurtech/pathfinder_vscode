@@ -235,10 +235,11 @@ export class NotebookController {
         schemaId: string,
         environmentId?: string
     ): Promise<vscode.NotebookCellData[]> {
-        const cells: vscode.NotebookCellData[] = [];
-
-        // Add title cell with endpoint description
-        const title = endpoint.summary ?? `${endpoint.method.toUpperCase()} ${endpoint.path}`;
+        const cells: vscode.NotebookCellData[] = [];        // Add title cell with endpoint description including category and method
+        const category = endpoint.tags && endpoint.tags.length > 0 ? endpoint.tags[0] : 'API';
+        const method = endpoint.method.toUpperCase();
+        const endpointTitle = endpoint.summary ?? `${method} ${endpoint.path}`;
+        const title = `${category} - ${endpointTitle} - ${method}`;
         const description = endpoint.description ?? 'No description available';
         cells.push(new vscode.NotebookCellData(
             vscode.NotebookCellKind.Markup,
@@ -264,8 +265,9 @@ export class NotebookController {
                 `## Environment\n\nCurrent: ${environmentId ? environments.find(e => e.id === environmentId)?.name ?? 'Unknown' : 'None selected'}`,
                 'markdown'
             ));
-        }        // Add variables cell with current context values
-        const variablesJson = JSON.stringify(this.variableContext, null, 2);
+        }        // Add variables cell with current context values (masked for security)
+        const maskedContext = this.maskSensitiveVariables(this.variableContext);
+        const variablesJson = JSON.stringify(maskedContext, null, 2);
         cells.push(new vscode.NotebookCellData(
             vscode.NotebookCellKind.Code,
             variablesJson || '{\n  "baseUrl": "{{baseUrl}}",\n  "apiKey": "{{apiKey}}"\n}',
@@ -595,5 +597,26 @@ export class NotebookController {
         if (metadata?.schemaId && metadata?.environmentId) {
             await this.initializeVariableContext(metadata.schemaId, metadata.environmentId);
         }
+    }    /**
+     * Masks sensitive values in the variable context for display
+     */
+    private maskSensitiveVariables(context: VariableContext): VariableContext {
+        // Only mask truly sensitive values, not username
+        const sensitiveKeys = ['password', 'apikey', 'token', 'secret', 'auth', 'bearer', 'key'];
+        const masked: VariableContext = {};
+        
+        for (const [key, value] of Object.entries(context)) {
+            const keyLower = key.toLowerCase();
+            const isSensitive = sensitiveKeys.some(sensitiveKey => keyLower.includes(sensitiveKey));
+            
+            if (isSensitive && typeof value === 'string' && value.length > 0) {
+                // Show last character and mask the rest
+                masked[key] = '*'.repeat(Math.max(0, value.length - 1)) + value.slice(-1);
+            } else {
+                masked[key] = value;
+            }
+        }
+        
+        return masked;
     }
 }
