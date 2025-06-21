@@ -202,19 +202,7 @@
       {
         "command": "pathfinder.addEnvironmentToGroup",
         "title": "Add Environment to Group",
-        "category": "Pathfinder"
-      },      // DISABLED: Old HTTP request editor - keeping code for fallback but removing from UI
-      // {
-      //   "command": "pathfinder.runHttpRequest",
-      //   "title": "Run HTTP Request",
-      //   "icon": "$(play)",
-      //   "category": "Pathfinder"
-      // },
-      // {
-      //   "command": "pathfinder.executeHttpRequest",
-      //   "title": "Execute HTTP Request",
-      //   "category": "Pathfinder"
-      // },
+        "category": "Pathfinder"      },
       {
         "command": "pathfinder.toggleAuthVisibility",
         "title": "Toggle Authorization Visibility",

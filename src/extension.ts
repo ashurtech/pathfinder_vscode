@@ -1758,34 +1758,20 @@ async function forceSchemaFirstMigration() {
 async function recreateRequestFromHistory(historyItem: any) {
     try {
         const { request, notebookMetadata } = historyItem;
+          // Create a simple endpoint mock for the notebook creation
+        const mockEndpoint = {
+            method: request.method ?? 'GET',
+            path: new URL(request.url ?? 'http://example.com').pathname,
+            url: request.url ?? 'http://example.com',
+            summary: `Recreated from history - ${new Date(historyItem.timestamp).toLocaleString()}`
+        };
         
-        // Create a new notebook with the request
-        const requestContent = formatHttpRequestFromHistory(request);
-        const notebook = await notebookController.createNotebookWithContent([
-            {
-                kind: vscode.NotebookCellKind.Markdown,
-                languageId: 'markdown',
-                value: `# Recreated Request\n\nRecreated from history: ${new Date(historyItem.timestamp).toLocaleString()}\n\n**Original Environment:** ${notebookMetadata.environmentId || 'Unknown'}`
-            },
-            {
-                kind: vscode.NotebookCellKind.Code,
-                languageId: 'http',
-                value: requestContent
-            }
-        ]);
-        
-        // Set notebook metadata if available
-        if (notebookMetadata.schemaId || notebookMetadata.environmentId) {
-            await vscode.workspace.fs.writeFile(
-                notebook.uri.with({ scheme: 'vscode-notebook-metadata' }),
-                Buffer.from(JSON.stringify({
-                    pathfinder: {
-                        schemaId: notebookMetadata.schemaId,
-                        environmentId: notebookMetadata.environmentId
-                    }
-                }))
-            );
-        }
+        // Create a new notebook with the endpoint
+        const notebook = await notebookController.createNotebookFromEndpoint(
+            mockEndpoint, 
+            notebookMetadata.schemaId ?? 'history', 
+            notebookMetadata.environmentId ?? 'default'
+        );
         
         await notebookController.openNotebook(notebook);
         
@@ -1800,8 +1786,8 @@ async function recreateRequestFromHistory(historyItem: any) {
  * Format an HTTP request from history for use in a notebook cell
  */
 function formatHttpRequestFromHistory(request: any): string {
-    const method = request.method || 'GET';
-    const url = request.url || '';
+    const method = request.method ?? 'GET';
+    const url = request.url ?? '';
     
     let content = `${method} ${url}\n`;
     
@@ -1817,7 +1803,7 @@ function formatHttpRequestFromHistory(request: any): string {
     // Add body if present
     if (request.data || request.body) {
         content += '\n';
-        const body = request.data || request.body;
+        const body = request.data ?? request.body;
         if (typeof body === 'string') {
             content += body;
         } else {
