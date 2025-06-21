@@ -340,15 +340,15 @@ export class NotebookController {
             ])
         ];        // Add JSON output only if response is reasonably sized
         const responseBodySize = result.body ? result.body.length : 0;
-        // Reduced limit to avoid VS Code's truncation UI - VS Code truncates around 8KB
-        const MAX_JSON_OUTPUT_SIZE = 8000; // 8KB limit to prevent truncation UI
+        // Increased limit for better API exploration - users want to see full responses
+        const MAX_JSON_OUTPUT_SIZE = 100000; // 100KB limit - much more generous for API responses
 
         if (responseBodySize > 0 && responseBodySize <= MAX_JSON_OUTPUT_SIZE) {
-            // JSON response data (for easy variable extraction) - only for smaller responses
+            // JSON response data (for easy variable extraction) - now supports larger responses
             outputs.push(new vscode.NotebookCellOutput([
                 vscode.NotebookCellOutputItem.json(result, 'application/json')
             ]));
-        } else if (responseBodySize > MAX_JSON_OUTPUT_SIZE && result.body) {
+        }else if (responseBodySize > MAX_JSON_OUTPUT_SIZE && result.body) {
             // For large responses, provide a text summary instead
             const sizeMB = (responseBodySize / 1024 / 1024).toFixed(2);
             const preview = result.body.substring(0, 1000);
@@ -717,15 +717,13 @@ export class NotebookController {
         }
         
         return details;
-    }
-
-    /**
-     * Formats response body with appropriate truncation
+    }    /**
+     * Formats response body with appropriate limits for API exploration
      */
     private formatResponseBody(body: string): string {
         const bodySize = body.length;
-        // Conservative limit to avoid VS Code's truncation UI (appears around 8KB)
-        const MAX_BODY_DISPLAY_SIZE = 5000;
+        // Increased limit for better API exploration - users want to see more data
+        const MAX_BODY_DISPLAY_SIZE = 50000; // 50KB for full display
         
         if (bodySize <= MAX_BODY_DISPLAY_SIZE) {
             return this.formatSmallResponseBody(body);
@@ -748,22 +746,20 @@ export class NotebookController {
         } catch {
             return body;
         }
-    }
-
-    /**
-     * Formats large response bodies with truncation
+    }    /**
+     * Formats large response bodies with expanded preview
      */
     private formatLargeResponseBody(body: string, bodySize: number): string {
         const sizeMB = (bodySize / 1024 / 1024).toFixed(2);
         let result = `[Large Response - ${sizeMB}MB, ${bodySize.toLocaleString()} bytes]\n`;
-        result += `Showing first 1000 characters to avoid truncation UI:\n\n`;
+        result += `Showing first 10,000 characters for better API exploration:\n\n`;
         
         try {
             // Check if it's valid JSON
             JSON.parse(body);
-            result += body.substring(0, 1000) + '\n\n...[truncated - see JSON output below for full data if < 8KB]';
+            result += body.substring(0, 10000) + '\n\n...[truncated - see JSON output below for full data if < 100KB]';
         } catch {
-            result += body.substring(0, 1000) + '\n\n...[truncated - response too large for full display]';
+            result += body.substring(0, 10000) + '\n\n...[truncated - response too large for full display]';
         }
         
         return result;
