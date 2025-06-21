@@ -302,6 +302,24 @@ export class NotebookController {
             };
         }
         
+        // Confirm DELETE requests before execution
+        if (parsedRequest.method.toUpperCase() === 'DELETE') {
+            const confirmed = await this.confirmDeleteRequest(parsedRequest);
+            if (!confirmed) {
+                // User cancelled - create a cancellation output
+                execution.replaceOutput([
+                    new vscode.NotebookCellOutput([
+                        vscode.NotebookCellOutputItem.text(
+                            '⚠️ DELETE request cancelled by user\n\nThe HTTP DELETE request was not executed to prevent accidental data deletion.',
+                            'text/plain'
+                        )
+                    ])
+                ]);
+                execution.end(true, Date.now());
+                return;
+            }
+        }
+        
         const result = await this.httpExecutor.executeRequest(parsedRequest);
         const executionDuration = Date.now() - startTime;
         
@@ -1060,9 +1078,7 @@ export class NotebookController {
         
         // Open the summary notebook
         await vscode.window.showTextDocument(summaryUri);
-    }
-
-    /**
+    }    /**
      * Get the group executor for multi-environment execution
      */
     getGroupExecutor(): GroupExecutor {
@@ -1074,5 +1090,22 @@ export class NotebookController {
      */
     getRequestHistoryProvider(): NotebookRequestHistoryProvider {
         return this.requestHistory;
+    }
+
+    /**
+     * Confirms DELETE request execution with the user
+     */
+    private async confirmDeleteRequest(request: any): Promise<boolean> {
+        const url = request.url;
+        const method = request.method.toUpperCase();
+        
+        const result = await vscode.window.showWarningMessage(
+            `You are about to execute a ${method} request to:\n${url}\n\nThis may permanently delete data and cannot be undone.`,
+            { modal: true },
+            'Execute DELETE Request',
+            'Cancel'
+        );
+        
+        return result === 'Execute DELETE Request';
     }
 }

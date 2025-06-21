@@ -75,9 +75,7 @@ export async function activate(context: vscode.ExtensionContext) {
     const requestHistoryView = vscode.window.createTreeView('pathfinderRequestHistory', {
         treeDataProvider: requestHistoryProvider,
         showCollapseAll: true
-    });
-    
-    // Register notebook request history view
+    });    // Register notebook request history view
     const notebookHistoryProvider = notebookController.getRequestHistoryProvider();
     const notebookHistoryView = vscode.window.createTreeView('pathfinderNotebookHistory', {
         treeDataProvider: notebookHistoryProvider,

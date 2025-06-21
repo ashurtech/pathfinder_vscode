@@ -321,8 +321,7 @@
             "filenamePattern": "*.pfhttp"
           }
         ]
-      }
-    ],    "views": {
+      }    ],    "views": {
       "pathfinder-sidebar-view": [
         {
           "id": "pathfinderExplorer",
@@ -336,7 +335,8 @@
         },
         {
           "id": "pathfinderNotebookHistory",
-          "name": "Notebook Request History"
+          "name": "Notebook Request History",
+          "when": "true"
         }
       ]
     },

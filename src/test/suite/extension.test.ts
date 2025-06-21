@@ -11,17 +11,18 @@ suite('Pathfinder - OpenAPI Explorer Test Suite', () => {
             await extension.activate();
             assert.ok(extension.isActive);
         }
-    });test('Commands should be registered', async () => {
-        const commands = await vscode.commands.getCommands(true);
+    });test('Commands should be registered', async () => {        const commands = await vscode.commands.getCommands(true);
         
         const expectedCommands = [
             'pathfinder.addEnvironment',
             'pathfinder.loadSchemaFromUrl',
             'pathfinder.loadSchemaFromFile',
             'pathfinder.listEnvironments',
-            'pathfinder.deleteEnvironment',
             'pathfinder.showSchemaInfo',
-            'pathfinder.refreshTree'
+            'pathfinder.refreshTree',
+            'pathfinder.addApiSchema',
+            'pathfinder.addEnvironmentGroup',
+            'pathfinder.runInNotebook'
         ];
         
         expectedCommands.forEach(command => {
