@@ -1,206 +1,337 @@
 # Pathfinder - OpenAPI Explorer
 
-A VS Code extension that acts as your compass for navigating REST APIs with OpenAPI (Swagger) specifications. Pathfinder helps developers explore, test, and generate code for APIs with intelligent platform detection and environment management.
+A VS Code extension for exploring, testing, and generating code from OpenAPI/Swagger specifications. Pathfinder uses a schema-first approach to help you manage multiple API environments with authentication inheritance.
 
-Originally designed to streamline work with Kibana APIs across multiple environments, Pathfinder has evolved into a comprehensive OpenAPI exploration tool that adapts to your workflow.
+## Quick Start
 
-Works well with these openai api's;
+1. **Add an API Schema**: Load an OpenAPI specification from URL or file
+2. **Create Environment Groups**: Organize related environments (dev, test, prod)
+3. **Add Environments**: Configure specific API instances with authentication
+4. **Browse & Test**: Explore endpoints and generate HTTP requests
 
-Kibana - https://www.elastic.co/docs/api/doc/kibana.json 
-& 
-Elasticsearch - https://www.elastic.co/docs/api/doc/elasticsearch.json
+## Core Concepts
 
-## 🧭 What Makes Pathfinder Special
+### Schemas
+The foundation of Pathfinder. A **schema** contains:
+- OpenAPI/Swagger specification
+- Base configuration (headers, timeouts)
+- Platform detection (Kibana, Elasticsearch, etc.)
 
-Pathfinder goes beyond simple API browsing by providing:
-- **Smart Platform Detection**: Automatically detects Kibana, Elasticsearch, and other API platforms
-- **Multi-Environment Support**: Manage multiple API environments with different base URLs and credentials
-- **Intelligent Code Generation**: Generate requests in multiple formats (cURL, Ansible, PowerShell, and more)
-- **In-Editor Testing**: Execute API calls and view results directly in VS Code
-- **Auto-completion**: IntelliSense for API parameters with type checking
-- **Schema Validation**: Load and validate OpenAPI/Swagger specifications
+### Environment Groups
+Organize related environments under a schema. **Environment groups** provide:
+- Shared authentication settings
+- Logical organization (e.g., "Development", "Production")
+- Authentication inheritance to environments
 
-## 🎯 Use Cases
+### Environments
+Specific API instances within a group. **Environments** inherit:
+- Authentication from their environment group (if configured)
+- Base headers from the parent schema
+- Platform-specific settings
 
-This extension helps developers:
-- **Explore APIs**: Browse through API endpoints with rich documentation
-- **Multi-Environment Management**: Work with multiple Kibana/API instances seamlessly
-- **Generate Code**: Create ready-to-use code snippets in various formats
-- **Test Endpoints**: Execute API calls without leaving your editor
-- **Validate Schemas**: Ensure OpenAPI specifications are correct
-- **Learn APIs**: Understand API structures through interactive exploration
+**Authentication Inheritance Chain**: Schema defaults → Environment Group auth → Environment auth
 
-## 🎓 Educational Goals
+## Getting Started
 
-This project is designed as a learning experience for developers who:
-- Know JavaScript basics but are new to TypeScript
-- Want to learn VS Code extension development
-- Are interested in working with REST APIs and OpenAPI specs
-- Want to understand modern development tooling (esbuild, ESLint, etc.)
+### 1. Adding Your First Schema
 
-## 🛠️ Technology Stack
+**From URL:**
+1. Open Command Palette (`Ctrl+Shift+P`)
+2. Run "Pathfinder: Load Schema from URL"
+3. Enter the OpenAPI specification URL
+4. Give your schema a name
 
-### Core Technologies
-- **TypeScript**: JavaScript with static type checking
-- **VS Code Extension API**: The interface for extending VS Code
-- **Node.js**: JavaScript runtime for the extension backend
+**From File:**
+1. Open Command Palette (`Ctrl+Shift+P`)
+2. Run "Pathfinder: Load Schema from File"
+3. Select your OpenAPI `.json` or `.yaml` file
+4. Give your schema a name
 
-### Key Libraries
-- **axios**: Promise-based HTTP client for API requests
-- **swagger-parser**: Validates and dereferences OpenAPI specifications
-- **openapi-types**: TypeScript type definitions for OpenAPI
+**Example URLs:**
+- Kibana: `https://www.elastic.co/docs/api/doc/kibana.json`
+- Elasticsearch: `https://www.elastic.co/docs/api/doc/elasticsearch.json`
 
-### Development Tools
-- **esbuild**: Fast JavaScript bundler and minifier
-- **ESLint**: Code linting and style enforcement
-- **Mocha**: JavaScript testing framework
-- **npm-run-all**: Run multiple npm scripts in parallel
+### 2. Creating Environment Groups
 
-## 📁 Project Structure
+Environment groups help organize related environments and provide shared authentication.
+
+**Via Tree View:**
+1. Right-click on a schema in the Pathfinder Explorer
+2. Select "Add Environment Group"
+3. Fill out the form:
+   - **Name**: Descriptive name (e.g., "Development", "Production")
+   - **Description**: Optional details
+   - **Authentication**: Set shared auth for all environments in this group
+
+**Authentication Options:**
+- **None**: No authentication
+- **API Key**: Header or query parameter based
+- **Bearer Token**: Authorization header with token
+- **Basic Auth**: Username/password authentication
+
+**Via Command:**
+1. Open Command Palette (`Ctrl+Shift+P`)
+2. Run "Pathfinder: Add Environment Group"
+3. Select target schema
+4. Configure group settings
+
+### 3. Adding Environments
+
+Environments represent specific API instances (dev server, production, etc.).
+
+**Via Tree View:**
+1. Right-click on an environment group
+2. Select "Add Environment to Group"
+3. Configure:
+   - **Name**: Environment identifier (e.g., "dev-server")
+   - **Base URL**: Full API base URL (e.g., `https://api.dev.company.com`)
+   - **Authentication**: Override group auth if needed
+
+**Via Command:**
+1. Open Command Palette (`Ctrl+Shift+P`)
+2. Run "Pathfinder: Add API Environment"
+3. Select target schema
+4. Configure environment
+
+**Authentication Inheritance:**
+- If environment group has auth configured, environments inherit it automatically
+- Individual environments can override group authentication
+- Leave environment auth as "None" to use group authentication
+
+### 4. Understanding the Tree Structure
+
+The Pathfinder Explorer shows:
 
 ```
-pathfinder-openapi-explorer/
-├── src/                          # Source TypeScript files
-│   ├── extension.ts              # Main extension entry point
-│   ├── tree-provider.ts          # API explorer tree view
-│   ├── tree-commands.ts          # Tree interaction commands
-│   ├── configuration.ts          # Settings management
-│   └── test/
-│       └── extension.test.ts     # Unit tests
-├── dist/                         # Compiled JavaScript output
-├── node_modules/                 # Installed dependencies
-├── package.json                  # Project manifest and dependencies
-├── tsconfig.json                 # TypeScript compiler configuration
-├── eslint.config.mjs             # ESLint code quality rules
-├── esbuild.js                    # Build tool configuration
-└── README.md                     # Project documentation
+📋 Schema Name (v1.0)
+├── 📁 Environment Group 1
+│   ├── 🌐 dev-environment
+│   └── 🌐 prod-environment
+├── 📁 Environment Group 2
+│   └── 🌐 test-environment
+└── 📋 Endpoints
+    ├── 📁 Tag Group 1
+    │   ├── GET /api/users
+    │   └── POST /api/users
+    └── 📁 Tag Group 2
+        └── GET /api/health
 ```
 
-## 🚀 Getting Started
+## Working with APIs
 
-### Prerequisites
-- Node.js (v16 or higher)
-- VS Code
-- Basic knowledge of JavaScript
+### Browsing Endpoints
 
-### Development Setup
+1. **Expand Schema**: Click to show environment groups and endpoints
+2. **Expand Endpoint Groups**: Endpoints are organized by OpenAPI tags
+3. **View Endpoint Details**: Click any endpoint to see:
+   - Parameters
+   - Request/response schemas
+   - Authentication requirements
 
-1. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+### Testing Endpoints
 
-2. **Compile the extension**:
-   ```bash
-   npm run compile
-   ```
+**HTTP Request Files:**
+1. Right-click any endpoint
+2. Select "Open HTTP Request"
+3. Edit the generated `.http` file
+4. Click "Send Request" or use `Ctrl+Alt+R`
 
-3. **Run tests**:
-   ```bash
-   npm test
-   ```
+**Jupyter Notebooks:**
+1. Right-click any endpoint
+2. Select "Create Notebook"
+3. Execute cells to test API calls
+4. Modify requests and re-run
 
-4. **Start development mode**:
-   ```bash
-   npm run watch
-   ```
+### Code Generation
 
-5. **Test the extension**:
-   - Press `F5` in VS Code to open a new Extension Development Host window
-   - In the new window, press `Ctrl+Shift+P` to open the command palette
-   - Type "Pathfinder" to see available commands
+Generate ready-to-use code for any endpoint:
 
-## 📚 Key Concepts Explained
+1. Right-click an endpoint
+2. Select "Generate Code"
+3. Choose format:
+   - **cURL**: Command-line requests
+   - **JavaScript**: Fetch/axios requests
+   - **Python**: requests library
+   - **PowerShell**: Invoke-RestMethod
+   - **Ansible**: uri module tasks
 
-### VS Code Extension Basics
+## Authentication Management
 
-**Extension Entry Point**: The `extension.ts` file exports two main functions:
-- `activate()`: Called when the extension starts up
-- `deactivate()`: Called when the extension shuts down
+### Setting Up Authentication
 
-**Commands**: Actions users can trigger through the Command Palette or keyboard shortcuts. Defined in `package.json` and implemented in code.
+**Environment Group Level (Recommended):**
+1. Right-click environment group → "Edit Environment Group"
+2. Configure authentication once
+3. All environments in group inherit these settings
 
-**Activation Events**: Conditions that cause VS Code to load your extension (e.g., opening certain file types).
+**Individual Environment Level:**
+1. Right-click environment → "Edit Environment"
+2. Override group authentication if needed
 
-### TypeScript for JavaScript Developers
+### Authentication Types
 
-**Type Annotations**: Add types to variables and functions for better error catching:
-```typescript
-const message: string = "Hello World";
-function greet(name: string): string {
-    return `Hello, ${name}!`;
+**API Key Authentication:**
+- **Header**: `Authorization: ApiKey <your-key>`
+- **Query Parameter**: `?api_key=<your-key>`
+- Specify header/parameter name
+
+**Bearer Token:**
+- **Header**: `Authorization: Bearer <your-token>`
+
+**Basic Authentication:**
+- **Header**: `Authorization: Basic <base64(username:password)>`
+
+**Platform-Specific:**
+- **Kibana**: Automatically adds `kbn-xsrf: true` header
+- **Elasticsearch**: Uses ApiKey format by default
+
+### Credential Storage
+
+Pathfinder securely stores credentials using VS Code's SecretStorage:
+- Credentials never appear in settings files
+- Encrypted storage managed by VS Code
+- Credentials prompt when first needed
+
+## Advanced Features
+
+### Schema Management
+
+**Updating Schemas:**
+1. Right-click schema → "Manage Schema"
+2. Update from URL or reload from file
+3. Environments automatically use updated endpoints
+
+**Schema Validation:**
+- Automatic validation on load
+- View validation errors in schema info
+- Invalid schemas show warning indicators
+
+**Platform Detection:**
+- Auto-detects Kibana, Elasticsearch APIs
+- Applies platform-specific defaults
+- Adds required headers automatically
+
+### Environment Management
+
+**Duplicating Environments:**
+1. Right-click environment → "Duplicate Environment"
+2. Modify settings for new environment
+3. Maintains authentication inheritance
+
+**Environment Groups:**
+- Color-code groups for visual organization
+- Bulk authentication management
+- Logical environment organization
+
+### File Generation
+
+**HTTP Files:**
+Generated `.http` files include:
+- Full URL with environment base URL
+- Required headers (platform-specific)
+- Authentication headers
+- Example request body (for POST/PUT)
+- Variable substitution support
+
+**Notebook Files:**
+Generated `.ipynb` files include:
+- Markdown documentation cells
+- HTTP request cells
+- Variable definition cells
+- Response processing examples
+
+## Troubleshooting
+
+### Common Issues
+
+**Schema Won't Load:**
+- Check URL accessibility
+- Verify OpenAPI specification format
+- Look for validation errors in output panel
+
+**Authentication Not Working:**
+- Verify credentials in SecretStorage
+- Check authentication inheritance chain
+- Confirm API key/token format requirements
+
+**Endpoints Not Appearing:**
+- Refresh schema (right-click → "Refresh")
+- Check OpenAPI specification has valid paths
+- Verify schema validation passed
+
+### Getting Help
+
+1. **View Schema Info**: Right-click schema → "Show Schema Information"
+2. **Check Storage**: Command → "Pathfinder: Show Storage Statistics"
+3. **Reset Data**: Command → "Pathfinder: Factory Reset" (removes all data)
+
+## Supported Platforms
+
+Pathfinder provides enhanced support for:
+
+- **Kibana APIs**: Auto-adds CSRF headers, ApiKey format
+- **Elasticsearch APIs**: ApiKey authentication, SSL handling
+- **Generic OpenAPI**: Works with any valid specification
+
+## File Formats
+
+### HTTP Request Files (`.http`)
+```http
+### Get User List
+GET {{baseUrl}}/api/users
+Authorization: Bearer {{token}}
+kbn-xsrf: true
+
+### Create User
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "name": "John Doe",
+  "email": "john@example.com"
 }
 ```
 
-**Interfaces**: Define the shape of objects:
-```typescript
-interface ApiEndpoint {
-    path: string;
-    method: string;
-    description?: string; // Optional property
-}
-```
+### Jupyter Notebooks (`.ipynb`)
+- Interactive API exploration
+- Step-by-step request building
+- Response analysis and visualization
+- Variable management
 
-**Async/Await**: Handle asynchronous operations:
-```typescript
-async function loadSchema(url: string): Promise<any> {
-    const response = await axios.get(url);
-    return response.data;
-}
-```
+## Commands Reference
 
-## 🧪 Testing
+| Command | Description |
+|---------|-------------|
+| `Pathfinder: Add API Schema` | Load OpenAPI specification |
+| `Pathfinder: Add Environment Group` | Create environment group |
+| `Pathfinder: Add API Environment` | Create new environment |
+| `Pathfinder: List API Environments` | View all environments |
+| `Pathfinder: Load Schema from URL` | Load schema from URL |
+| `Pathfinder: Load Schema from File` | Load schema from file |
+| `Pathfinder: Show Schema Information` | View schema details |
+| `Pathfinder: Show Storage Statistics` | View data usage |
+| `Pathfinder: Factory Reset` | Clear all data |
 
-Tests are written using the Mocha framework and run with:
-```bash
-npm test
-```
+## Context Menu Actions
 
-Test files are located in `src/test/` and follow the pattern `*.test.ts`.
+**Schema Actions:**
+- Add Environment Group
+- Manage Schema
+- Show Schema Information
 
-## 🔧 Build Process
+**Environment Group Actions:**
+- Add Environment to Group
+- Edit Environment Group
+- Delete Environment Group
 
-The extension uses **esbuild** for fast compilation:
-- `npm run compile`: One-time build
-- `npm run watch`: Continuous compilation during development
-- `npm run package`: Production build with optimization
+**Environment Actions:**
+- Edit Environment
+- Duplicate Environment
+- Delete Environment
 
-## 📦 Available Commands
-
-Once installed, Pathfinder provides these commands (accessible via `Ctrl+Shift+P`):
-
-- **Pathfinder: Hello World**: Simple test command
-- **Pathfinder: Add API Environment**: Add a new API environment configuration
-- **Pathfinder: List API Environments**: View all configured API environments
-- **Pathfinder: Delete API Environment**: Remove an API environment
-- **Pathfinder: Load Schema from URL**: Parse an OpenAPI specification from a URL
-- **Pathfinder: Load Schema from File**: Parse an OpenAPI specification from a local file
-- **Pathfinder: Generate Client Code**: Create code snippets for API calls
-- **Pathfinder: Test API Endpoint**: Execute API calls and view results
-- **Pathfinder: Validate Schema**: Check if an OpenAPI schema is valid
-- **Pathfinder: Refresh Explorer**: Refresh the API explorer tree view
-
-## 🤝 Contributing
-
-This is an educational project! Contributions that help with learning are welcome:
-- Add more detailed comments
-- Improve error handling examples
-- Add new features with educational value
-- Enhance documentation
-
-## 📝 License
-
-MIT License - feel free to use this code for learning and building your own extensions.
-
-## 🔗 Useful Resources
-
-- [VS Code Extension API Documentation](https://code.visualstudio.com/api)
-- [OpenAPI Specification](https://swagger.io/specification/)
-- [TypeScript Handbook](https://www.typescriptlang.org/docs/)
-- [Mocha Testing Framework](https://mochajs.org/)
-- [ESBuild Documentation](https://esbuild.github.io/)
-
-- [VS Code Extension API](https://code.visualstudio.com/api)
-- [TypeScript Handbook](https://www.typescriptlang.org/docs/)
-- [OpenAPI Specification](https://swagger.io/specification/)
-- [Node.js Documentation](https://nodejs.org/docs/)
+**Endpoint Actions:**
+- Open HTTP Request
+- Create Notebook
+- Generate Code
+- Test Endpoint
