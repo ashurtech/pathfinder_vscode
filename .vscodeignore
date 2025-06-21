@@ -8,6 +8,8 @@ tests/**
 jstests/**
 notes/**
 coverage/**
+builds/**
+test/**
 .gitignore
 .yarnrc
 esbuild.js
@@ -17,3 +19,21 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+
+# Large sample schemas - keep only small examples
+sample-schemas/kibana-openapi-source.json
+sample-schemas/kibana-openapi-source.json.backup
+sample-schemas/elasticsearch-openapi-source.json
+sample-schemas/kibana-openapi-sourcez.yaml
+
+# Development and testing files
+debug-*.js
+test-*.js
+test-*.http
+test-*.ipynb
+*.vsix
+
+# Configuration files not needed in package
+jest.config.js
+package-lock.json
+ROOT_CLEANUP_PLAN.md

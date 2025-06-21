@@ -33,6 +33,7 @@ import { AddSchemaEnvironmentWebview } from './webviews/add-schema-environment-f
 import { AddSchemaEnvironmentGroupWebview } from './webviews/add-schema-environment-group-form';
 import { AddEnvironmentToGroupWebview } from './webviews/add-environment-to-group-form';
 import { EditEnvironmentWebview } from './webviews/edit-environment-form';
+import { SchemaManagementWebview } from './schema-management-webview';
 import { ApiEnvironment, EndpointInfo, SchemaEnvironment, SchemaEnvironmentGroup } from './types';
 
 // Global instances that will be used throughout the extension
@@ -346,10 +347,14 @@ function registerCommands(context: vscode.ExtensionContext) {
         'pathfinder.editSchemaGroup',
         (group: any) => editSchemaGroupHandler(group)
     );
-    
-    const editSchemaCommand = vscode.commands.registerCommand(
+      const editSchemaCommand = vscode.commands.registerCommand(
         'pathfinder.editSchema',
         (schema: any) => editSchemaHandler(schema, context)
+    );
+    
+    const manageSchemaCommand = vscode.commands.registerCommand(
+        'pathfinder.manageSchema',
+        (schema: any) => manageSchemaHandler(schema, context)
     );
     
     const addEnvironmentForSchemaCommand = vscode.commands.registerCommand(
@@ -567,9 +572,9 @@ function registerCommands(context: vscode.ExtensionContext) {
         showStorageStatsCommand,
         resetSessionCommand,
         factoryResetCommand,
-        addApiSchemaCommand,
-        editSchemaGroupCommand,
+        addApiSchemaCommand,        editSchemaGroupCommand,
         editSchemaCommand,
+        manageSchemaCommand,
         addEnvironmentForSchemaCommand,
         deleteSchemaCommand,
         deleteSchemaEnvironmentCommand,
@@ -1845,6 +1850,28 @@ async function editSchemaHandler(schema: any, context: vscode.ExtensionContext) 
     } catch (error) {
         console.error('Failed to open edit schema form:', error);
         vscode.window.showErrorMessage(`Failed to open edit schema form: ${error}`);
+    }
+}
+
+/**
+ * Command to manage a schema (configure update URL, check for updates, etc.)
+ */
+async function manageSchemaHandler(schema: any, context: vscode.ExtensionContext) {
+    try {
+        console.log('Opening schema management webview...');
+        
+        // Create and show the schema management webview
+        const schemaManagementWebview = new SchemaManagementWebview(
+            schema,
+            configManager,
+            schemaLoader
+        );
+        
+        schemaManagementWebview.show(context);
+        
+    } catch (error) {
+        console.error('Failed to open schema management webview:', error);
+        vscode.window.showErrorMessage(`Failed to open schema management: ${error}`);
     }
 }
 

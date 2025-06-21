@@ -201,12 +201,19 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 'folder-opened',
                 [schemaItem.schema]
             ));
-            
-            children.push(new EnvironmentActionTreeItem(
+              children.push(new EnvironmentActionTreeItem(
                 'Edit Schema',
                 'Edit this schema\'s settings',
                 'pathfinder.editSchema',
                 'edit',
+                [schemaItem.schema]
+            ));
+            
+            children.push(new EnvironmentActionTreeItem(
+                'Manage Schema',
+                'Configure schema updates and management settings',
+                'pathfinder.manageSchema',
+                'settings-gear',
                 [schemaItem.schema]
             ));
               // Get environment groups for this schema

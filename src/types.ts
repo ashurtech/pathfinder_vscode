@@ -336,9 +336,11 @@ export interface ApiSchema {
     
     /** The actual OpenAPI specification document */
     schema: OpenAPIV3.Document;
-    
-    /** Where we loaded this schema from */
+      /** Where we loaded this schema from */
     source: string;
+    
+    /** URL to check for schema updates (optional) */
+    schema_url?: string;
     
     /** When we loaded this schema */
     loadedAt: Date;
