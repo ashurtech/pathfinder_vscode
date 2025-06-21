@@ -109,9 +109,7 @@ export class NotebookController {
      */
     async openNotebook(notebook: vscode.NotebookDocument): Promise<void> {
         await vscode.window.showNotebookDocument(notebook, { viewColumn: vscode.ViewColumn.One });
-    }
-
-    /**
+    }    /**
      * Executes a single notebook cell
      */
     private async executeCell(
@@ -119,10 +117,13 @@ export class NotebookController {
         notebook: vscode.NotebookDocument,
         controller: vscode.NotebookController
     ): Promise<void> {
+        // Ensure variable context is restored from notebook metadata before execution
+        await this.restoreVariableContextFromNotebook(notebook);
+        
         for (const cell of cells) {
             await this.executeSingleCell(cell, notebook);
         }
-    }    /**
+    }/**
      * Executes a single cell based on its language
      */
     private async executeSingleCell(
@@ -270,7 +271,7 @@ export class NotebookController {
         } catch {
             return false;
         }
-    }/**
+    }    /**
      * Executes an HTTP cell
      */
     private async executeHttpCell(
@@ -280,14 +281,23 @@ export class NotebookController {
         const httpContent = cell.document.getText();
         const parsedRequest = this.httpParser.parseHttpRequest(httpContent, this.variableContext);
         
+        // Add environment metadata from notebook if available
+        const notebook = vscode.window.activeNotebookEditor?.notebook;
+        const metadata = notebook?.metadata?.pathfinder;
+        if (metadata?.environmentId) {
+            parsedRequest.metadata = {
+                ...parsedRequest.metadata,
+                environmentId: metadata.environmentId,
+                schemaId: metadata.schemaId
+            };
+        }
+        
         const result = await this.httpExecutor.executeRequest(parsedRequest);
         
         // Update variable context with response data
         if (result.data && typeof result.data === 'object') {
             this.variableContext = { ...this.variableContext, ...result.data };
-        }
-
-        // Create detailed outputs showing both request and response
+        }        // Create detailed outputs showing both request and response
         const requestDetails = this.formatRequestDetails(parsedRequest);
         const responseDetails = this.formatResponseDetails(result);
 
@@ -305,12 +315,34 @@ export class NotebookController {
                     `📥 RESPONSE\n${'='.repeat(50)}\n${responseDetails}`,
                     'text/plain'
                 )
-            ]),
-            // JSON response data (for easy variable extraction)
-            new vscode.NotebookCellOutput([
-                vscode.NotebookCellOutputItem.json(result, 'application/json')
             ])
-        ];
+        ];        // Add JSON output only if response is reasonably sized
+        const responseBodySize = result.body ? result.body.length : 0;
+        // Reduced limit to avoid VS Code's truncation UI - VS Code truncates around 8KB
+        const MAX_JSON_OUTPUT_SIZE = 8000; // 8KB limit to prevent truncation UI
+
+        if (responseBodySize > 0 && responseBodySize <= MAX_JSON_OUTPUT_SIZE) {
+            // JSON response data (for easy variable extraction) - only for smaller responses
+            outputs.push(new vscode.NotebookCellOutput([
+                vscode.NotebookCellOutputItem.json(result, 'application/json')
+            ]));
+        } else if (responseBodySize > MAX_JSON_OUTPUT_SIZE && result.body) {
+            // For large responses, provide a text summary instead
+            const sizeMB = (responseBodySize / 1024 / 1024).toFixed(2);
+            const preview = result.body.substring(0, 1000);
+            const isPreview = result.body.length > 1000;
+            
+            outputs.push(new vscode.NotebookCellOutput([
+                vscode.NotebookCellOutputItem.text(
+                    `⚠️  LARGE RESPONSE (${sizeMB}MB)\n${'='.repeat(50)}\n` +
+                    `Response is too large to display as interactive JSON.\n` +
+                    `Size: ${responseBodySize.toLocaleString()} bytes\n` +
+                    `See response details above for formatted content.\n\n` +
+                    `Preview (first 1000 characters):\n${preview}${isPreview ? '...' : ''}`,
+                    'text/plain'
+                )
+            ]));
+        }
 
         execution.replaceOutput(outputs);
         execution.end(true, Date.now());
@@ -640,7 +672,7 @@ export class NotebookController {
         
         return details;
     }    /**
-     * Formats response details for display
+     * Formats response details with size limits to avoid VS Code truncation UI
      */
     private formatResponseDetails(result: HttpExecutionResult): string {
         let details = `Status: ${result.status} ${result.statusText}\n`;
@@ -659,16 +691,61 @@ export class NotebookController {
         
         if (result.body) {
             details += 'Body:\n';
-            try {
-                const formatted = JSON.stringify(JSON.parse(result.body), null, 2);
-                details += formatted;
-            } catch {
-                details += result.body;
-            }
+            details += this.formatResponseBody(result.body);
         }
         
         return details;
-    }    /**
+    }
+
+    /**
+     * Formats response body with appropriate truncation
+     */
+    private formatResponseBody(body: string): string {
+        const bodySize = body.length;
+        // Conservative limit to avoid VS Code's truncation UI (appears around 8KB)
+        const MAX_BODY_DISPLAY_SIZE = 5000;
+        
+        if (bodySize <= MAX_BODY_DISPLAY_SIZE) {
+            return this.formatSmallResponseBody(body);
+        } else {
+            return this.formatLargeResponseBody(body, bodySize);
+        }
+    }
+
+    /**
+     * Formats small response bodies with full content
+     */
+    private formatSmallResponseBody(body: string): string {
+        try {
+            const parsed = JSON.parse(body);
+            const formatted = JSON.stringify(parsed, null, 2);
+            // Double-check formatted size doesn't exceed limits
+            return formatted.length > 5000 ? 
+                body.substring(0, 1000) + '\n\n...[response too large when formatted]' : 
+                formatted;
+        } catch {
+            return body;
+        }
+    }
+
+    /**
+     * Formats large response bodies with truncation
+     */
+    private formatLargeResponseBody(body: string, bodySize: number): string {
+        const sizeMB = (bodySize / 1024 / 1024).toFixed(2);
+        let result = `[Large Response - ${sizeMB}MB, ${bodySize.toLocaleString()} bytes]\n`;
+        result += `Showing first 1000 characters to avoid truncation UI:\n\n`;
+        
+        try {
+            // Check if it's valid JSON
+            JSON.parse(body);
+            result += body.substring(0, 1000) + '\n\n...[truncated - see JSON output below for full data if < 8KB]';
+        } catch {
+            result += body.substring(0, 1000) + '\n\n...[truncated - response too large for full display]';
+        }
+        
+        return result;
+    }/**
      * Initializes the variable context with environment data
      */
     private async initializeVariableContext(schemaId: string, environmentId?: string): Promise<void> {

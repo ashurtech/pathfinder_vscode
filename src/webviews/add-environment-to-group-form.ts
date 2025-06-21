@@ -78,8 +78,7 @@ export class AddEnvironmentToGroupWebview {
                     command: 'showError',
                     error: 'Please enter a valid URL'
                 });
-                return;
-            }
+                return;            }
 
             // Create the new environment object
             const newEnvironment: any = {
@@ -88,21 +87,26 @@ export class AddEnvironmentToGroupWebview {
                 environmentGroupId: this.group.id,
                 name: data.name.trim(),
                 baseUrl: data.baseUrl.trim(),
-                description: data.description?.trim() || undefined,
+                description: data.description?.trim() ?? undefined,
                 auth: { type: 'none' },
                 createdAt: new Date()
             };
 
-            // Handle authentication if provided
-            if (data.auth?.type && data.auth.type !== 'none') {
+            // Handle authentication
+            if (data.inheritAuth && this.group.defaultAuth?.type !== 'none') {
+                // Inherit authentication from the group
+                newEnvironment.auth = { type: 'inherit' };
+                // The auth credentials will be resolved from the parent group at runtime
+            } else if (data.auth?.type && data.auth.type !== 'none' && data.auth.type !== 'inherit') {
+                // Use custom authentication for this environment
                 switch (data.auth.type) {
-                    case 'apikey':
+                    case 'apikey': {
                         if (!data.auth.apiKey?.trim()) {
                             throw new Error('API Key is required for API Key Authentication');
                         }
                         newEnvironment.auth = {
                             type: 'apikey',
-                            keyName: data.auth.keyName?.trim() || 'X-API-Key'
+                            keyName: data.auth.keyName?.trim() ?? 'X-API-Key'
                         };
                         // Store API key securely
                         const apiKeySecretKey = await this.configManager.setCredentials(newEnvironment, {
@@ -110,8 +114,9 @@ export class AddEnvironmentToGroupWebview {
                         });
                         newEnvironment.authSecretKey = apiKeySecretKey;
                         break;
+                    }
 
-                    case 'bearer':
+                    case 'bearer': {
                         if (!data.auth.token?.trim()) {
                             throw new Error('Bearer token is required for Bearer Authentication');
                         }
@@ -124,8 +129,9 @@ export class AddEnvironmentToGroupWebview {
                         });
                         newEnvironment.authSecretKey = bearerSecretKey;
                         break;
+                    }
 
-                    case 'basic':
+                    case 'basic': {
                         if (!data.auth.username?.trim() || !data.auth.password?.trim()) {
                             throw new Error('Username and password are required for Basic Authentication');
                         }
@@ -140,6 +146,7 @@ export class AddEnvironmentToGroupWebview {
                         });
                         newEnvironment.authSecretKey = basicSecretKey;
                         break;
+                    }
                 }
             }
 
@@ -384,12 +391,100 @@ export class AddEnvironmentToGroupWebview {
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
-        }
-
-        .help-text {
+        }        .help-text {
             font-size: 12px;
             color: var(--vscode-descriptionForeground);
             margin-top: 4px;
+        }
+
+        .auth-section {
+            background-color: var(--vscode-editor-inactiveSelectionBackground);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .auth-section.disabled {
+            opacity: 0.6;
+            background-color: var(--vscode-input-background);
+        }
+
+        .auth-section h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            color: var(--vscode-foreground);
+            font-weight: 600;
+        }
+
+        .toggle-section {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 10px;
+        }
+
+        .toggle {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--vscode-button-secondaryBackground);
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--vscode-button-background);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(20px);
+        }
+
+        .inherit-info {
+            background-color: var(--vscode-textCodeBlock-background);
+            border-left: 4px solid var(--vscode-textLink-foreground);
+            padding: 12px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .inherit-info.show {
+            display: block;
+        }
+
+        .inherit-info.hide {
+            display: none;
         }
     </style>
 </head>
@@ -420,59 +515,75 @@ export class AddEnvironmentToGroupWebview {
                 <div class="validation-error" id="baseUrlError"></div>
                 <div class="validation-success" id="baseUrlSuccess">✓ Valid URL format</div>
                 <div class="help-text">The base URL for API requests in this environment</div>
-            </div>
-
-            <div class="form-group">
+            </div>            <div class="form-group">
                 <label for="description">Description</label>
                 <textarea id="description" name="description" placeholder="Optional description for this environment..."></textarea>
                 <div class="help-text">Optional description to help identify this environment</div>
             </div>
 
-            <div class="form-group">
-                <label for="authType">Authentication</label>
-                <select id="authType" name="auth.type">
-                    <option value="none">No Authentication</option>
-                    <option value="apikey">API Key</option>
-                    <option value="bearer">Bearer Token</option>
-                    <option value="basic">Basic Authentication</option>
-                </select>
-                <div class="help-text">Select the authentication method for this environment</div>
-            </div>
+            <div class="auth-section" id="authSection">
+                <h3>Authentication Settings</h3>
+                
+                <div class="inherit-info" id="inheritInfo">
+                    <strong>Inherit from Group:</strong> This environment will use the authentication settings from the "${this.group.name}" group.
+                </div>
+                
+                <div class="toggle-section">
+                    <label class="toggle">
+                        <input type="checkbox" id="inheritAuth" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <label for="inheritAuth" style="cursor: pointer;">Inherit authentication from group</label>
+                </div>
 
-            <!-- API Key Authentication Fields -->
-            <div id="apikeyFields" class="auth-fields">
-                <div class="form-group">
-                    <label for="keyName">Key Name</label>
-                    <input type="text" id="keyName" name="auth.keyName" placeholder="e.g., 'X-API-Key'">
-                    <div class="hint">The header name for the API key</div>
-                </div>
-                <div class="form-group">
-                    <label for="apiKey">API Key <span class="required">*</span></label>
-                    <input type="password" id="apiKey" name="auth.apiKey" placeholder="Enter your API key">
-                    <div class="hint">The API key value</div>
-                </div>
-            </div>
+                <div id="customAuthFields">
+                    <div class="form-group">
+                        <label for="authType">Authentication Type</label>
+                        <select id="authType" name="auth.type">
+                            <option value="none">No Authentication</option>
+                            <option value="apikey">API Key</option>
+                            <option value="bearer">Bearer Token</option>
+                            <option value="basic">Basic Authentication</option>
+                        </select>
+                        <div class="help-text">Select the authentication method for this environment</div>
+                    </div>
 
-            <!-- Bearer Token Authentication Fields -->
-            <div id="bearerFields" class="auth-fields">
-                <div class="form-group">
-                    <label for="bearerToken">Bearer Token <span class="required">*</span></label>
-                    <input type="password" id="bearerToken" name="auth.token" placeholder="Enter your bearer token">
-                    <div class="hint">The bearer token value</div>
-                </div>
-            </div>
+                    <!-- API Key Authentication Fields -->
+                    <div id="apikeyFields" class="auth-fields">
+                        <div class="form-group">
+                            <label for="keyName">Key Name</label>
+                            <input type="text" id="keyName" name="auth.keyName" placeholder="e.g., 'X-API-Key'">
+                            <div class="help-text">The header name for the API key</div>
+                        </div>
+                        <div class="form-group">
+                            <label for="apiKey">API Key <span class="required">*</span></label>
+                            <input type="password" id="apiKey" name="auth.apiKey" placeholder="Enter your API key">
+                            <div class="help-text">The API key value</div>
+                        </div>
+                    </div>
 
-            <!-- Basic Authentication Fields -->
-            <div id="basicFields" class="auth-fields">
-                <div class="form-group">
-                    <label for="username">Username <span class="required">*</span></label>
-                    <input type="text" id="username" name="auth.username" placeholder="Enter username">
-                    <div class="hint">The username for basic authentication</div>
-                </div>
-                <div class="form-group">
-                    <label for="password">Password <span class="required">*</span></label>
-                    <input type="password" id="password" name="auth.password" placeholder="Enter password">
-                    <div class="hint">The password for basic authentication</div>
+                    <!-- Bearer Token Authentication Fields -->
+                    <div id="bearerFields" class="auth-fields">
+                        <div class="form-group">
+                            <label for="bearerToken">Bearer Token <span class="required">*</span></label>
+                            <input type="password" id="bearerToken" name="auth.token" placeholder="Enter your bearer token">
+                            <div class="help-text">The bearer token value</div>
+                        </div>
+                    </div>
+
+                    <!-- Basic Authentication Fields -->
+                    <div id="basicFields" class="auth-fields">
+                        <div class="form-group">
+                            <label for="username">Username <span class="required">*</span></label>
+                            <input type="text" id="username" name="auth.username" placeholder="Enter username">
+                            <div class="help-text">The username for basic authentication</div>
+                        </div>
+                        <div class="form-group">
+                            <label for="password">Password <span class="required">*</span></label>
+                            <input type="password" id="password" name="auth.password" placeholder="Enter password">
+                            <div class="help-text">The password for basic authentication</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -492,9 +603,7 @@ export class AddEnvironmentToGroupWebview {
     </div>
 
     <script>
-        const vscode = acquireVsCodeApi();
-
-        // Form elements
+        const vscode = acquireVsCodeApi();        // Form elements
         const form = document.getElementById('environmentForm');
         const nameInput = document.getElementById('name');
         const baseUrlInput = document.getElementById('baseUrl');
@@ -504,6 +613,12 @@ export class AddEnvironmentToGroupWebview {
         const cancelBtn = document.getElementById('cancelBtn');
         const errorMessage = document.getElementById('errorMessage');
         const loadingOverlay = document.getElementById('loadingOverlay');
+
+        // Authentication elements
+        const inheritAuthToggle = document.getElementById('inheritAuth');
+        const authSection = document.getElementById('authSection');
+        const inheritInfo = document.getElementById('inheritInfo');
+        const customAuthFields = document.getElementById('customAuthFields');
 
         // Validation elements
         const nameError = document.getElementById('nameError');
@@ -517,6 +632,39 @@ export class AddEnvironmentToGroupWebview {
 
         // Form validation
         let isValidUrl = false;
+
+        // Initialize inherit authentication state based on group auth
+        const groupHasAuth = ${(this.group.defaultAuth?.type ?? 'none') !== 'none'};
+        if (groupHasAuth) {
+            inheritAuthToggle.checked = true;
+            inheritInfo.classList.add('show');
+            inheritInfo.classList.remove('hide');
+            customAuthFields.style.display = 'none';
+        } else {
+            inheritAuthToggle.checked = false;
+            inheritInfo.classList.add('hide');
+            inheritInfo.classList.remove('show');
+            customAuthFields.style.display = 'block';
+        }
+
+        // Handle inherit authentication toggle
+        inheritAuthToggle.addEventListener('change', () => {
+            const isInheriting = inheritAuthToggle.checked;
+            
+            if (isInheriting) {
+                inheritInfo.classList.add('show');
+                inheritInfo.classList.remove('hide');
+                customAuthFields.style.display = 'none';
+                authSection.classList.add('disabled');
+            } else {
+                inheritInfo.classList.add('hide');
+                inheritInfo.classList.remove('show');
+                customAuthFields.style.display = 'block';
+                authSection.classList.remove('disabled');
+            }
+            
+            updateSubmitButton();
+        });
 
         // Real-time validation for name
         nameInput.addEventListener('input', () => {
@@ -575,9 +723,7 @@ export class AddEnvironmentToGroupWebview {
                     basicFields.classList.add('show');
                     break;
             }
-        });
-
-        // Form submission
+        });        // Form submission
         form.addEventListener('submit', (e) => {
             e.preventDefault();
             
@@ -585,24 +731,27 @@ export class AddEnvironmentToGroupWebview {
                 name: nameInput.value.trim(),
                 baseUrl: baseUrlInput.value.trim(),
                 description: descriptionInput.value.trim(),
+                inheritAuth: inheritAuthToggle.checked,
                 auth: {
-                    type: authTypeSelect.value
+                    type: inheritAuthToggle.checked ? 'inherit' : authTypeSelect.value
                 }
             };
             
-            // Add auth-specific fields
-            switch (formData.auth.type) {
-                case 'apikey':
-                    formData.auth.keyName = document.getElementById('keyName').value.trim();
-                    formData.auth.apiKey = document.getElementById('apiKey').value.trim();
-                    break;
-                case 'bearer':
-                    formData.auth.token = document.getElementById('bearerToken').value.trim();
-                    break;
-                case 'basic':
-                    formData.auth.username = document.getElementById('username').value.trim();
-                    formData.auth.password = document.getElementById('password').value.trim();
-                    break;
+            // Only add auth-specific fields if not inheriting from group
+            if (!inheritAuthToggle.checked) {
+                switch (formData.auth.type) {
+                    case 'apikey':
+                        formData.auth.keyName = document.getElementById('keyName').value.trim();
+                        formData.auth.apiKey = document.getElementById('apiKey').value.trim();
+                        break;
+                    case 'bearer':
+                        formData.auth.token = document.getElementById('bearerToken').value.trim();
+                        break;
+                    case 'basic':
+                        formData.auth.username = document.getElementById('username').value.trim();
+                        formData.auth.password = document.getElementById('password').value.trim();
+                        break;
+                }
             }
             
             // Basic validation

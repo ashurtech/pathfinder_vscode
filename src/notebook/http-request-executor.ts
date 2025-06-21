@@ -90,15 +90,52 @@ export class HttpRequestExecutor {
      */
     async execute(request: ParsedHttpRequest): Promise<HttpExecutionResult> {
         return this.executeRequest(request);
-    }
-
-    /**
+    }    /**
      * Applies authentication to the request based on environment configuration
      */
     private async applyAuthentication(request: ParsedHttpRequest): Promise<ParsedHttpRequest> {
-        // For now, return the request as-is
-        // Authentication will be handled by variable substitution
-        return request;
+        // If no environment metadata, return request as-is
+        if (!request.metadata?.environmentId || !this.configManager) {
+            return request;
+        }
+
+        try {
+            // Get environment configuration
+            const config = await this.configManager.resolveEnvironmentConfig(request.metadata.environmentId);
+            if (!config) {
+                return request;
+            }
+
+            // Merge headers with environment headers
+            const mergedHeaders = {
+                ...config.resolvedHeaders,
+                ...request.headers
+            };
+
+            // Get credentials from secret storage
+            const credentials = await this.configManager.getCredentials(config.environment);
+
+            // Add authentication headers from environment config and credentials
+            if (config.resolvedAuth && credentials) {
+                if (config.resolvedAuth.type === 'bearer' && credentials.apiKey) {
+                    mergedHeaders['Authorization'] = `Bearer ${credentials.apiKey}`;
+                } else if (config.resolvedAuth.type === 'apikey' && credentials.apiKey) {
+                    mergedHeaders['X-API-Key'] = credentials.apiKey;
+                } else if (config.resolvedAuth.type === 'basic' && credentials.username && credentials.password) {
+                    const authString = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
+                    mergedHeaders['Authorization'] = `Basic ${authString}`;
+                }
+            }
+
+            return {
+                ...request,
+                headers: mergedHeaders
+            };
+        } catch (error) {
+            // If authentication fails, log and return original request
+            console.error('Failed to apply authentication:', error);
+            return request;
+        }
     }
 
     /**

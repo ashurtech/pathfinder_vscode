@@ -43,9 +43,7 @@ export class AddEnvironmentGroupWebview {
                 }
             }
         );
-    }
-
-    private async handleSubmit(data: any) {
+    }    private async handleSubmit(data: any) {
         try {
             // Validate required fields
             if (!data.name) {
@@ -57,26 +55,34 @@ export class AddEnvironmentGroupWebview {
             const group: SchemaEnvironmentGroup = {
                 id: `group_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
                 schemaId: this.schemaId,
-                name: data.name,
-                description: data.description || '',
-                color: data.color || 'blue',
-                createdAt: new Date()
+                name: data.name,                description: data.description ?? '',
+                color: data.color ?? 'blue',
+                createdAt: new Date(),
+                defaultAuth: { type: 'none' },
+                authSecretKey: undefined
             };
 
-            // If credentials were provided, store them
-            if (data.auth?.type !== 'none') {
+            // Handle authentication if provided
+            if (data.auth?.type && data.auth.type !== 'none') {
                 let credentials: { username?: string; password?: string; apiKey?: string } = {};
                 
                 switch (data.auth.type) {
+                    case 'apikey':
+                        group.defaultAuth = {
+                            type: 'apikey',                            apiKeyLocation: data.auth.apiKeyLocation ?? 'header',
+                            apiKeyName: data.auth.apiKeyName ?? 'X-API-Key'
+                        };
+                        credentials = { apiKey: data.auth.apiKey };
+                        break;
+                    case 'bearer':
+                        group.defaultAuth = { type: 'bearer' };
+                        credentials = { apiKey: data.auth.bearerToken };
+                        break;
                     case 'basic':
+                        group.defaultAuth = { type: 'basic', username: data.auth.username };
                         credentials = {
                             username: data.auth.username,
                             password: data.auth.password
-                        };
-                        break;
-                    case 'apikey':
-                        credentials = {
-                            apiKey: data.auth.apiKey
                         };
                         break;
                 }
@@ -332,8 +338,7 @@ export class AddEnvironmentGroupWebview {
                 <textarea id="description" name="description" placeholder="e.g., 'All Kibana test environments'"></textarea>
                 <div class="hint">Optional description to help identify this group</div>
             </div>
-            
-            <div class="form-group">
+              <div class="form-group">
                 <label>Color Theme</label>
                 <div class="color-group">
                     <div class="color-option color-blue selected" data-color="blue" title="Blue" role="button" aria-label="Select blue color theme" tabindex="0" aria-pressed="true"></div>
@@ -344,6 +349,47 @@ export class AddEnvironmentGroupWebview {
                     <div class="color-option color-yellow" data-color="yellow" title="Yellow" role="button" aria-label="Select yellow color theme" tabindex="0" aria-pressed="false"></div>
                 </div>
                 <div class="hint">Choose a color for visual identification in the tree view</div>
+            </div>
+
+            <div class="form-group">
+                <label for="authType">Default Authentication Type</label>
+                <select id="authType" name="authType">
+                    <option value="none">🚫 No Authentication</option>
+                    <option value="apikey">🔑 API Key</option>
+                    <option value="bearer">🎫 Bearer Token</option>
+                    <option value="basic">👤 Basic Authentication</option>
+                </select>
+                <div class="hint">This authentication will be used as the default for all environments in this group. Individual environments can override this setting.</div>
+            </div>
+
+            <!-- API Key Authentication Fields -->
+            <div class="form-group auth-fields" id="apiKeyFields" style="display: none;">
+                <label for="apiKey">API Key <span class="required">*</span></label>
+                <input type="password" id="apiKey" name="apiKey" placeholder="Enter your API key">
+                
+                <label for="apiKeyLocation" style="margin-top: 15px;">API Key Location</label>
+                <select id="apiKeyLocation" name="apiKeyLocation">
+                    <option value="header">HTTP Header</option>
+                    <option value="query">Query Parameter</option>
+                </select>
+                
+                <label for="apiKeyName" style="margin-top: 15px;">API Key Name</label>
+                <input type="text" id="apiKeyName" name="apiKeyName" value="X-API-Key" placeholder="e.g., X-API-Key, Authorization">
+            </div>
+
+            <!-- Bearer Token Authentication Fields -->
+            <div class="form-group auth-fields" id="bearerFields" style="display: none;">
+                <label for="bearerToken">Bearer Token <span class="required">*</span></label>
+                <input type="password" id="bearerToken" name="bearerToken" placeholder="Enter your bearer token">
+            </div>
+
+            <!-- Basic Authentication Fields -->
+            <div class="form-group auth-fields" id="basicFields" style="display: none;">
+                <label for="username">Username <span class="required">*</span></label>
+                <input type="text" id="username" name="username" placeholder="Enter username">
+                
+                <label for="password" style="margin-top: 15px;">Password <span class="required">*</span></label>
+                <input type="password" id="password" name="password" placeholder="Enter password">
             </div>
         </form>
         
@@ -368,8 +414,7 @@ export class AddEnvironmentGroupWebview {
         const cancelButton = document.getElementById('cancelButton');
         const errorMessage = document.getElementById('errorMessage');
         const loadingMessage = document.getElementById('loadingMessage');
-        
-        // Color selection
+          // Color selection
         let selectedColor = 'blue';
         
         document.querySelectorAll('.color-option').forEach(option => {
@@ -395,6 +440,32 @@ export class AddEnvironmentGroupWebview {
             selectedOption.setAttribute('aria-pressed', 'true');
             selectedColor = selectedOption.dataset.color;
         }
+
+        // Authentication type handling
+        const authTypeSelect = document.getElementById('authType');
+        const authFields = document.querySelectorAll('.auth-fields');
+        
+        authTypeSelect.addEventListener('change', function(e) {
+            const authType = e.target.value;
+            
+            // Hide all auth fields
+            authFields.forEach(field => {
+                field.style.display = 'none';
+            });
+            
+            // Show relevant auth fields
+            switch (authType) {
+                case 'apikey':
+                    document.getElementById('apiKeyFields').style.display = 'block';
+                    break;
+                case 'bearer':
+                    document.getElementById('bearerFields').style.display = 'block';
+                    break;
+                case 'basic':
+                    document.getElementById('basicFields').style.display = 'block';
+                    break;
+            }
+        });
         
         // Form submission
         form.addEventListener('submit', (e) => {
@@ -403,8 +474,44 @@ export class AddEnvironmentGroupWebview {
             const formData = {
                 name: nameInput.value.trim(),
                 description: descriptionInput.value.trim(),
-                color: selectedColor
+                color: selectedColor,
+                auth: {
+                    type: authTypeSelect.value
+                }
             };
+
+            // Add authentication data based on type
+            if (authTypeSelect.value !== 'none') {
+                switch (authTypeSelect.value) {
+                    case 'apikey':
+                        formData.auth.apiKey = document.getElementById('apiKey').value.trim();
+                        formData.auth.apiKeyLocation = document.getElementById('apiKeyLocation').value;
+                        formData.auth.apiKeyName = document.getElementById('apiKeyName').value.trim();
+                        
+                        if (!formData.auth.apiKey) {
+                            showError('API Key is required for API Key authentication');
+                            return;
+                        }
+                        break;
+                    case 'bearer':
+                        formData.auth.bearerToken = document.getElementById('bearerToken').value.trim();
+                        
+                        if (!formData.auth.bearerToken) {
+                            showError('Bearer token is required for Bearer Token authentication');
+                            return;
+                        }
+                        break;
+                    case 'basic':
+                        formData.auth.username = document.getElementById('username').value.trim();
+                        formData.auth.password = document.getElementById('password').value.trim();
+                        
+                        if (!formData.auth.username || !formData.auth.password) {
+                            showError('Username and password are required for Basic Authentication');
+                            return;
+                        }
+                        break;
+                }
+            }
             
             // Basic validation
             if (!formData.name) {

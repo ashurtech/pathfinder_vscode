@@ -373,14 +373,20 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 [endpoint, schemaItem.schema.id, environment.id]
             )
         ];
-    }
-
-    /**
+    }    /**
      * Get children for the generate commands folder
      */
     private getGenerateCommandsChildren(folderItem: GenerateCommandsFolderTreeItem): TreeItem[] {
         const endpoint = folderItem.endpoint;
         const schemaItem = folderItem.schemaItem;
+        const environment = folderItem.environment;
+        
+        // Create a combined object that includes environment information for the snippet generators
+        const schemaItemWithEnvironment = {
+            ...schemaItem,
+            environment: environment,
+            schema: schemaItem.schema
+        };
         
         return [
             new EndpointActionTreeItem(
@@ -388,35 +394,35 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
                 'Generate cURL command for this endpoint',
                 'pathfinder.generateCurl',
                 'terminal',
-                [endpoint, schemaItem]
+                [endpoint, schemaItemWithEnvironment]
             ),
             new EndpointActionTreeItem(
                 '🔧 Generate Ansible',
                 'Generate Ansible task for this endpoint',
                 'pathfinder.generateAnsible',
                 'settings-gear',
-                [endpoint, schemaItem]
+                [endpoint, schemaItemWithEnvironment]
             ),
             new EndpointActionTreeItem(
                 '⚡ Generate PowerShell',
                 'Generate PowerShell script for this endpoint',
                 'pathfinder.generatePowerShell',
                 'terminal-powershell',
-                [endpoint, schemaItem]
+                [endpoint, schemaItemWithEnvironment]
             ),
             new EndpointActionTreeItem(
                 '🐍 Generate Python',
                 'Generate Python requests code for this endpoint',
                 'pathfinder.generatePython',
                 'symbol-method',
-                [endpoint, schemaItem]
+                [endpoint, schemaItemWithEnvironment]
             ),
             new EndpointActionTreeItem(
                 '📜 Generate JavaScript',
                 'Generate JavaScript fetch code for this endpoint',
                 'pathfinder.generateJavaScript',
                 'symbol-function',
-                [endpoint, schemaItem]
+                [endpoint, schemaItemWithEnvironment]
             )
         ];
     }
