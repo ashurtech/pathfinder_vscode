@@ -23,13 +23,12 @@ describe('ApiTreeProvider', () => {
       deleteSchemaEnvironment: jest.fn(),
       updateExtensionSettings: jest.fn(),
       getSchemaEnvironmentGroupById: jest.fn()
-    } as any;
-
-    // Create mock schema loader
+    } as any;    // Create mock schema loader
     mockSchemaLoader = {
       loadFromUrl: jest.fn(),
       loadFromFile: jest.fn(),
-      validateSchema: jest.fn()
+      validateSchema: jest.fn(),
+      extractEndpoints: jest.fn().mockReturnValue([])
     } as any;
 
     treeProvider = new ApiTreeProvider(mockConfigManager, mockSchemaLoader);

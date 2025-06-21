@@ -2,7 +2,7 @@
   "name": "pathfinder-openapi-explorer",
   "displayName": "Pathfinder - OpenAPI Explorer",
   "description": "Explore, test, and generate code for OpenAPI/REST APIs with intelligent platform detection",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "publisher": "ASHURTECHNET",
   "icon": "pathfinder.png",
   "repository": {
@@ -247,11 +247,22 @@
         "title": "Run in Request Notebook",
         "icon": "$(notebook)",
         "category": "Pathfinder"
-      },
-      {
+      },      {
         "command": "pathfinder.fixNotebookCellLanguages",
         "title": "Fix Notebook Cell Languages",
         "icon": "$(tools)",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.runAcrossEnvironments",
+        "title": "Run Across Multiple Environments",
+        "icon": "$(multiple-windows)",
+        "category": "Pathfinder"
+      },
+      {
+        "command": "pathfinder.runFromHistory",
+        "title": "Run From History Across Environments",
+        "icon": "$(history)",
         "category": "Pathfinder"
       }
     ],

@@ -438,8 +438,46 @@ function registerCommands(context: vscode.ExtensionContext) {
     const renameGroupCommand = vscode.commands.registerCommand(
         'pathfinder.renameGroup',
         (group: any) => renameGroupHandler(group)
+    );    
+    // ========================
+    // Multi-Environment Execution Commands
+    // ========================
+
+    const runAcrossEnvironmentsCommand = vscode.commands.registerCommand(
+        'pathfinder.runAcrossEnvironments',
+        async () => {
+            if (!notebookController) {
+                vscode.window.showErrorMessage('Notebook controller not available');
+                return;
+            }
+
+            const template = await notebookController.createTemplateFromLastExecution();
+            if (!template) {
+                return; // Error already shown
+            }
+
+            await notebookController.executeAcrossEnvironments(template);
+        }
     );
-    
+
+    const runFromHistoryCommand = vscode.commands.registerCommand(
+        'pathfinder.runFromHistory',
+        async (historyItem: any) => {
+            if (!notebookController) {
+                vscode.window.showErrorMessage('Notebook controller not available');
+                return;
+            }
+
+            if (!historyItem) {
+                vscode.window.showErrorMessage('No history item provided');
+                return;
+            }
+
+            const template = notebookController.getGroupExecutor().createRequestTemplate(historyItem);
+            await notebookController.executeAcrossEnvironments(template);
+        }
+    );
+
     // ========================
     // Configuration Import/Export Commands
     // ========================
@@ -600,7 +638,9 @@ function registerCommands(context: vscode.ExtensionContext) {
         exportConfigurationCommand,
         importConfigurationCommand,
         runInNotebookCommand,
-        fixNotebookCellLanguagesCommand
+        fixNotebookCellLanguagesCommand,
+        runAcrossEnvironmentsCommand,
+        runFromHistoryCommand
     );
 }
 
@@ -718,7 +758,7 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
  * Command to add a new API environment
  * This walks the user through setting up a new environment with authentication
  */
-async function addApiEnvironmentHandler(context: vscode.ExtensionContext) {
+async function addApiEnvironmentHandler(context: vscode.Extension.Context) {
     try {
         console.log('Opening add environment webview form...');
         
@@ -1099,7 +1139,7 @@ async function showStorageStatsHandler() {
 /**
  * Command to add a new environment group
  */
-async function addEnvironmentGroupHandler(context: vscode.ExtensionContext) {
+async function addEnvironmentGroupHandler(context: vscode.Extension.Context) {
     try {
         console.log('Opening add environment group webview form...');
         
@@ -1144,7 +1184,7 @@ async function addEnvironmentGroupHandler(context: vscode.ExtensionContext) {
 /**
  * Command to edit an environment group
  */
-async function editGroupHandler(group: any, context: vscode.ExtensionContext) {
+async function editGroupHandler(group: any, context: vscode.Extension.Context) {
     try {
         console.log('Opening edit environment group webview form...');
         
@@ -1320,7 +1360,7 @@ async function toggleAuthVisibilityCommand(documentUri: vscode.Uri) {
 /**
  * Command to add a new API schema in schema-first architecture
  */
-async function addApiSchemaHandler(context: vscode.ExtensionContext) {
+async function addApiSchemaHandler(context: vscode.Extension.Context) {
     try {
         console.log('Opening add schema webview form...');
         

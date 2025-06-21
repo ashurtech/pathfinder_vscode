@@ -14,6 +14,8 @@ import { EndpointInfo, SchemaEnvironment } from '../types';
 import { HttpRequestExecutor, HttpExecutionResult, ParsedHttpRequest } from './http-request-executor';
 import { HttpRequestParser } from './http-request-parser';
 import { NotebookRequestHistoryProvider } from './notebook-request-history';
+import { GroupExecutor, RequestTemplate, GroupExecutionResult } from './group-executor';
+import { EnvironmentSelectorWebview } from '../webviews/environment-selector';
 
 /**
  * Represents the structure of a notebook cell in our XML format
@@ -45,6 +47,7 @@ export class NotebookController {
     private readonly httpExecutor: HttpRequestExecutor;
     private readonly httpParser: HttpRequestParser;
     private readonly requestHistory: NotebookRequestHistoryProvider;
+    private readonly groupExecutor: GroupExecutor;
     private variableContext: VariableContext = {};
 
     constructor(
@@ -68,6 +71,7 @@ export class NotebookController {
         // Initialize HTTP execution components
         this.httpExecutor = new HttpRequestExecutor(configManager);
         this.httpParser = new HttpRequestParser();
+        this.groupExecutor = new GroupExecutor(this, configManager);
 
         // Register the controller
         this.context.subscriptions.push(this.controller);
@@ -900,6 +904,173 @@ export class NotebookController {
         const firstLine = lines[0];
         
         return markdownPatterns.some(pattern => pattern.test(firstLine));
+    }
+
+    /**
+     * Execute a request template across multiple environments
+     */
+    async executeAcrossEnvironments(template: RequestTemplate): Promise<void> {
+        const environmentSelector = new EnvironmentSelectorWebview(this.context, this.configManager);
+        
+        try {
+            const selection = await environmentSelector.show(template);
+            
+            if (!selection || !selection.confirmed || selection.selectedEnvironmentIds.length === 0) {
+                vscode.window.showInformationMessage('Multi-environment execution cancelled');
+                return;
+            }
+
+            // Show progress
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: 'Executing request across environments',
+                cancellable: false
+            }, async (progress) => {
+                let currentStep = 0;
+                const totalSteps = selection.selectedEnvironmentIds.length;
+
+                const result = await this.groupExecutor.executeAcrossEnvironments(
+                    template,
+                    selection.selectedEnvironmentIds,
+                    (progressInfo) => {
+                        progress.report({
+                            message: `Processing ${progressInfo.environmentName} (${progressInfo.current}/${progressInfo.total})`,
+                            increment: (100 / totalSteps)
+                        });
+                    }
+                );
+
+                // Show results summary
+                await this.showGroupExecutionResults(result);
+            });
+
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Failed to execute across environments: ${errorMessage}`);
+        }
+    }
+
+    /**
+     * Create a request template from the most recent notebook execution
+     */
+    async createTemplateFromLastExecution(notebookUri?: vscode.Uri): Promise<RequestTemplate | undefined> {
+        const currentNotebook = notebookUri ? 
+            vscode.workspace.notebookDocuments.find(nb => nb.uri.toString() === notebookUri.toString()) :
+            vscode.window.activeNotebookEditor?.notebook;
+
+        if (!currentNotebook) {
+            vscode.window.showErrorMessage('No active notebook found');
+            return undefined;
+        }
+
+        // Get the most recent history item for this notebook
+        const history = this.requestHistory.getHistoryForNotebook(currentNotebook.uri.toString());
+        if (history.length === 0) {
+            vscode.window.showErrorMessage('No request history found for this notebook');
+            return undefined;
+        }
+
+        const lastExecution = history[0]; // Most recent
+        return this.groupExecutor.createRequestTemplate(lastExecution);
+    }
+
+    /**
+     * Show the results of a group execution
+     */
+    private async showGroupExecutionResults(result: GroupExecutionResult): Promise<void> {
+        const { summary, results } = result;
+        
+        // Create summary message
+        let message = `Multi-environment execution completed!\n\n`;
+        message += `Status: ${result.status.toUpperCase()}\n`;
+        message += `Successful: ${summary.successfulExecutions}/${summary.totalEnvironments}\n`;
+        message += `Duration: ${summary.totalDuration}ms\n\n`;
+
+        if (summary.failedExecutions > 0) {
+            message += `Failed environments:\n`;
+            results.filter(r => r.error).forEach(r => {
+                message += `- ${r.environmentName}: ${r.error}\n`;
+            });
+            message += `\n`;
+        }
+
+        message += `Comparison notebooks created for each environment.`;
+
+        // Show notification with action to open comparison folder
+        const action = await vscode.window.showInformationMessage(
+            message,
+            'Open Comparison Folder',
+            'View Summary'
+        );
+
+        if (action === 'Open Comparison Folder') {
+            // Open the api-comparisons folder
+            const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
+            if (workspaceRoot) {
+                const comparisonsDir = vscode.Uri.joinPath(workspaceRoot, 'api-comparisons');
+                vscode.commands.executeCommand('revealFileInOS', comparisonsDir);
+            }
+        } else if (action === 'View Summary') {
+            // Create and show a summary notebook
+            await this.createSummaryNotebook(result);
+        }
+    }
+
+    /**
+     * Create a summary notebook showing all execution results
+     */
+    private async createSummaryNotebook(result: GroupExecutionResult): Promise<void> {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const summaryFilename = `api-comparison-summary-${timestamp}.pfhttp`;
+        
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
+        if (!workspaceRoot) {
+            vscode.window.showErrorMessage('No workspace folder found');
+            return;
+        }
+
+        const comparisonsDir = vscode.Uri.joinPath(workspaceRoot, 'api-comparisons');
+        const summaryUri = vscode.Uri.joinPath(comparisonsDir, summaryFilename);
+
+        // Generate summary content
+        let content = `# Multi-Environment Execution Summary\n\n`;
+        content += `**Execution ID:** ${result.request.executionId}\n`;
+        content += `**Request:** ${result.request.template.method} ${result.request.template.path}\n`;
+        content += `**Executed:** ${new Date().toISOString()}\n`;
+        content += `**Status:** ${result.status.toUpperCase()}\n\n`;
+
+        content += `## Summary\n\n`;
+        content += `- **Total Environments:** ${result.summary.totalEnvironments}\n`;
+        content += `- **Successful:** ${result.summary.successfulExecutions}\n`;
+        content += `- **Failed:** ${result.summary.failedExecutions}\n`;
+        content += `- **Total Duration:** ${result.summary.totalDuration}ms\n\n`;
+
+        content += `## Results by Environment\n\n`;
+        result.results.forEach(envResult => {
+            content += `### ${envResult.environmentName}\n\n`;
+            if (envResult.error) {
+                content += `❌ **Failed:** ${envResult.error}\n\n`;
+            } else {
+                const duration = typeof envResult.result.timing === 'object' ? 
+                    envResult.result.timing.duration : envResult.result.timing;
+                content += `✅ **Success:** ${envResult.result.status} ${envResult.result.statusText}\n`;
+                content += `⏱️ **Duration:** ${duration}ms\n`;
+                content += `📄 **Notebook:** [${envResult.notebookUri.fsPath.split('/').pop()}](${envResult.notebookUri.toString()})\n\n`;
+            }
+        });
+
+        // Create the summary file
+        await vscode.workspace.fs.writeFile(summaryUri, Buffer.from(content, 'utf8'));
+        
+        // Open the summary notebook
+        await vscode.window.showTextDocument(summaryUri);
+    }
+
+    /**
+     * Get the group executor for multi-environment execution
+     */
+    getGroupExecutor(): GroupExecutor {
+        return this.groupExecutor;
     }
 
     /**

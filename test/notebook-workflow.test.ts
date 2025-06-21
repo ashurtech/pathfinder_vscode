@@ -86,11 +86,8 @@ describe('Notebook Workflow End-to-End', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
-        
-        // Mock context and dependencies
-        mockContext = {
-            subscriptions: []
-        };
+          // Mock context and dependencies using the global factory
+        mockContext = (global as any).createMockExtensionContext();
         
         mockConfigManager = {
             getApiSchema: jest.fn(),

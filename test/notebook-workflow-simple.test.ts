@@ -3,6 +3,19 @@
  * Tests the complete notebook functionality without tree provider integration
  */
 
+// Mock the NotebookRequestHistoryProvider to avoid EventEmitter issues
+jest.mock('../src/notebook/notebook-request-history', () => ({
+    NotebookRequestHistoryProvider: jest.fn().mockImplementation(() => ({
+        onDidChangeTreeData: jest.fn(),
+        getTreeItem: jest.fn(),
+        getChildren: jest.fn(),
+        refresh: jest.fn(),
+        getParent: jest.fn(),
+        addRequest: jest.fn(),
+        clear: jest.fn()
+    }))
+}));
+
 // Mock VS Code APIs
 const mockVscode = {
     NotebookCellKind: {
@@ -66,15 +79,11 @@ describe('Notebook Workflow End-to-End', () => {
     let notebookController: NotebookController;
     let notebookProvider: NotebookProvider;
     let mockContext: any;
-    let mockConfigManager: any;
-
-    beforeEach(() => {
+    let mockConfigManager: any;    beforeEach(() => {
         jest.clearAllMocks();
         
-        // Mock context and dependencies
-        mockContext = {
-            subscriptions: []
-        };
+        // Mock context and dependencies using the global factory
+        mockContext = (global as any).createMockExtensionContext();
         
         mockConfigManager = {
             getApiSchema: jest.fn(),

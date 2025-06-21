@@ -3,6 +3,19 @@
  * Tests the basic construction and usage of notebook components
  */
 
+// Mock the NotebookRequestHistoryProvider to avoid EventEmitter issues
+jest.mock('../src/notebook/notebook-request-history', () => ({
+    NotebookRequestHistoryProvider: jest.fn().mockImplementation(() => ({
+        onDidChangeTreeData: jest.fn(),
+        getTreeItem: jest.fn(),
+        getChildren: jest.fn(),
+        refresh: jest.fn(),
+        getParent: jest.fn(),
+        addRequest: jest.fn(),
+        clear: jest.fn()
+    }))
+}));
+
 // Mock VS Code
 const mockVscode = {
     NotebookCellKind: {
@@ -66,12 +79,9 @@ describe('Notebook Integration', () => {
 
     beforeEach(() => {
         // Reset mocks
-        jest.clearAllMocks();
-        
-        // Mock context and config manager
-        mockContext = {
-            subscriptions: []
-        };
+        jest.clearAllMocks();        
+        // Mock context and config manager using the global factory
+        mockContext = (global as any).createMockExtensionContext();
           mockConfigManager = {
             getApiSchema: jest.fn(),
             getSchemaEnvironment: jest.fn(),

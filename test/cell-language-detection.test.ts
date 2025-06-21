@@ -2,6 +2,19 @@
  * Test for the new cell language detection and error handling functionality
  */
 
+// Mock the NotebookRequestHistoryProvider to avoid EventEmitter issues
+jest.mock('../src/notebook/notebook-request-history', () => ({
+    NotebookRequestHistoryProvider: jest.fn().mockImplementation(() => ({
+        onDidChangeTreeData: jest.fn(),
+        getTreeItem: jest.fn(),
+        getChildren: jest.fn(),
+        refresh: jest.fn(),
+        getParent: jest.fn(),
+        addRequest: jest.fn(),
+        clear: jest.fn()
+    }))
+}));
+
 import { NotebookController } from '../src/notebook/notebook-controller';
 import { ConfigurationManager } from '../src/configuration';
 import * as vscode from 'vscode';
@@ -44,11 +57,8 @@ describe('Notebook Cell Language Detection and Error Handling', () => {
         mockConfigManager = {
             getSchemaEnvironments: jest.fn().mockResolvedValue([]),
             getSchemaEnvironment: jest.fn().mockResolvedValue(null),
-        } as any;
-        
-        mockContext = {
-            subscriptions: [],
-        } as any;        // Mock the controller creation
+        } as any;        
+        mockContext = (global as any).createMockExtensionContext();// Mock the controller creation
         const mockController = {
             supportedLanguages: [],
             supportsExecutionOrder: false,
