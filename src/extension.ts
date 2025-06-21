@@ -1875,3 +1875,57 @@ async function updateWelcomeContext() {
         await vscode.commands.executeCommand('setContext', 'pathfinder.hasUserData', false);
     }
 }
+
+                return 'Environment name cannot be empty';
+            }
+            return null;
+        }
+    });
+    
+    if (newName && newName !== environment.name) {
+        try {
+            environment.name = newName.trim();
+            await configManager.saveSchemaEnvironment(environment);
+            if (treeProvider) {
+                treeProvider.refresh();
+            }
+            vscode.window.showInformationMessage(`Environment renamed to "${newName}"`);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to rename environment: ${error}`);
+        }
+    }
+}
+
+async function renameGroupHandler(group: any) {
+    const newName = await vscode.window.showInputBox({
+        prompt: 'Enter new group name',
+        value: group.name,
+        validateInput: (value) => {
+            if (!value || value.trim().length === 0) {
+                return 'Group name cannot be empty';
+            }
+            return null;
+        }
+    });
+    
+    if (newName && newName !== group.name) {
+        try {
+            group.name = newName.trim();
+            await configManager.saveSchemaEnvironmentGroup(group);
+            if (treeProvider) {
+                treeProvider.refresh();
+            }
+            vscode.window.showInformationMessage(`Group renamed to "${newName}"`);
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to rename group: ${error}`);
+        }
+    }
+}
+
+async function migrateToSchemaFirstHandler() {
+    vscode.window.showInformationMessage('Migration to schema-first architecture functionality is under development');
+}
+
+/**
+ * Update the welcome view context based on available user data
+ */
