@@ -10,7 +10,7 @@
  */
 
 import * as vscode from 'vscode';
-import { ExtensionSettings, ApiSchema, SchemaEnvironment, ApiSchemaGroup, ResolvedEnvironmentConfig, ApiEnvironment, ApiEnvironmentGroup, LoadedSchema, SchemaEnvironmentGroup } from './types';
+import { ExtensionSettings, ApiSchema, SchemaEnvironment, ApiSchemaGroup, ResolvedEnvironmentConfig, ApiEnvironment, ApiEnvironmentGroup, LoadedSchema, SchemaEnvironmentGroup, ApiAuthentication } from './types';
 
 /**
  * Manages configuration and storage for the API Helper extension
@@ -248,21 +248,24 @@ export class ConfigurationManager {
         if (!schema) {
             throw new Error(`Schema not found for environment: ${environment.name}`);
         }
-        
-        // Merge configurations in order of precedence:
+          // Merge configurations in order of precedence:
         // 1. Schema base defaults (lowest priority)
         // 2. Schema platform headers
         // 3. Environment custom headers (highest priority)
         const resolvedHeaders = {
-            ...(schema.baseConfig?.defaultHeaders || {}),
-            ...(schema.platformConfig?.requiredHeaders || {}),
-            ...(environment.customHeaders || {})
+            ...(schema.baseConfig?.defaultHeaders ?? {}),
+            ...(schema.platformConfig?.requiredHeaders ?? {}),
+            ...(environment.customHeaders ?? {})
         };
-          return {
+
+        // Resolve authentication with inheritance from environment groups
+        const resolvedAuthConfig = await this.resolveEnvironmentAuth(environment);
+        
+        return {
             environment,
             schema,
             resolvedHeaders,
-            resolvedAuth: environment.auth,
+            resolvedAuth: resolvedAuthConfig.auth,
             resolvedTimeout: environment.timeout ?? schema.baseConfig?.defaultTimeout ?? 30000,
             platformConfig: schema.platformConfig
         };
@@ -758,5 +761,42 @@ export class ConfigurationManager {
             console.error('Failed to import configuration:', error);
             throw new Error(`Failed to import configuration: ${error}`);
         }
+    }
+
+    /**
+     * Get a specific schema environment group by ID
+     */
+    async getSchemaEnvironmentGroupById(groupId: string): Promise<SchemaEnvironmentGroup | undefined> {
+        const groups = await this.getSchemaEnvironmentGroups();
+        return groups.find(group => group.id === groupId);
+    }
+
+    /**
+     * Resolve authentication configuration for an environment, inheriting from group if needed
+     */
+    async resolveEnvironmentAuth(environment: SchemaEnvironment): Promise<{ auth: ApiAuthentication, authSecretKey?: string }> {
+        // If environment has its own auth configured, use that
+        if (environment.auth?.type && environment.auth.type !== 'none') {
+            return {
+                auth: environment.auth,
+                authSecretKey: environment.authSecretKey
+            };
+        }
+
+        // If environment is in a group, try to inherit from group
+        if (environment.environmentGroupId) {
+            const group = await this.getSchemaEnvironmentGroupById(environment.environmentGroupId);
+            if (group?.defaultAuth?.type && group.defaultAuth.type !== 'none') {
+                return {
+                    auth: group.defaultAuth,
+                    authSecretKey: group.authSecretKey
+                };
+            }
+        }
+
+        // Fallback to no authentication
+        return {
+            auth: { type: 'none' }
+        };
     }
 }

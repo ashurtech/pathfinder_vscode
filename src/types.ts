@@ -441,6 +441,9 @@ export interface SchemaEnvironmentGroup {
     /** Color/icon theme for visual distinction */
     color?: 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow';
     
+    /** Default authentication configuration for environments in this group */
+    defaultAuth?: ApiAuthentication;
+    
     /**
      * Reference to a secret key in VS Code SecretStorage for credentials (API key or password)
      * If present, this group provides default credentials for its environments

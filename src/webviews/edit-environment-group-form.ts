@@ -37,8 +37,7 @@ export class EditEnvironmentGroupWebview {
                         this.panel?.dispose();
                         break;
                 }
-            }
-        );
+            }        );
     }
 
     private async handleFormSubmission(data: any) {
@@ -59,54 +58,92 @@ export class EditEnvironmentGroupWebview {
             const updatedGroup = {
                 ...this.group,
                 name: data.name.trim(),
-                description: data.description?.trim() || '',
-                color: (data.color as 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow') ?? this.group.color ?? 'blue'
+                description: data.description?.trim() ?? '',
+                color: (data.color as 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow') ?? this.group.color ?? 'blue',
+                defaultAuth: { type: 'none' as const },
+                authSecretKey: undefined
             };
 
-            // Save the environment group
-            if (this.group.schemaId) {
-                // Schema-level environment group
-                await this.configManager.saveSchemaEnvironmentGroup(updatedGroup);
-            } else {
-                // Regular environment group
-                await this.configManager.saveEnvironmentGroup(updatedGroup);
-            }
+            await this.processAuthenticationConfig(data, updatedGroup);
 
-            // Show success
-            await this.panel?.webview.postMessage({
-                command: 'setLoading',
-                loading: false
-            });
+            // Save the environment group (schema-level environment groups only)
+            await this.configManager.saveSchemaEnvironmentGroup(updatedGroup);
 
-            await this.panel?.webview.postMessage({
-                command: 'showSuccess',
-                message: `Environment group "${updatedGroup.name}" updated successfully!`
-            });
-
-            // Close webview after short delay
-            setTimeout(() => {
-                this.panel?.dispose();
-                this.onGroupUpdated();
-            }, 1500);
+            await this.showSuccessAndClose(updatedGroup.name);
 
         } catch (error) {
             console.error('Error updating environment group:', error);
             
-            // Show error
-            await this.panel?.webview.postMessage({
-                command: 'setLoading',
-                loading: false
-            });
-
-            await this.panel?.webview.postMessage({
-                command: 'showError',
-                message: error instanceof Error ? error.message : 'Failed to update environment group'
-            });
+            await this.showError(error instanceof Error ? error.message : 'Failed to update environment group');
         }
     }
 
+    private async processAuthenticationConfig(data: any, updatedGroup: any) {
+        if (data.authType && data.authType !== 'none') {
+            switch (data.authType) {
+                case 'apikey':
+                    if (!data.apiKey?.trim()) {
+                        throw new Error('API Key is required for API Key authentication');
+                    }
+                    updatedGroup.defaultAuth = {
+                        type: 'apikey',
+                        apiKeyLocation: data.apiKeyLocation ?? 'header',
+                        apiKeyName: data.apiKeyName?.trim() ?? 'X-API-Key'
+                    };
+                    updatedGroup.authSecretKey = await this.configManager.setCredentials(updatedGroup, { apiKey: data.apiKey.trim() });
+                    break;
+                case 'bearer':
+                    if (!data.bearerToken?.trim()) {
+                        throw new Error('Bearer token is required for Bearer Token authentication');
+                    }
+                    updatedGroup.defaultAuth = { type: 'bearer' };
+                    updatedGroup.authSecretKey = await this.configManager.setCredentials(updatedGroup, { apiKey: data.bearerToken.trim() });
+                    break;
+                case 'basic':
+                    if (!data.username?.trim() || !data.password?.trim()) {
+                        throw new Error('Username and password are required for Basic Authentication');
+                    }
+                    updatedGroup.defaultAuth = { type: 'basic', username: data.username.trim() };
+                    updatedGroup.authSecretKey = await this.configManager.setCredentials(updatedGroup, { username: data.username.trim(), password: data.password.trim() });
+                    break;
+            }
+        }
+    }
+
+    private async showSuccessAndClose(groupName: string) {
+        // Show success
+        await this.panel?.webview.postMessage({
+            command: 'setLoading',
+            loading: false
+        });
+
+        await this.panel?.webview.postMessage({
+            command: 'showSuccess',
+            message: `Environment group "${groupName}" updated successfully!`
+        });
+
+        // Close webview after short delay
+        setTimeout(() => {
+            this.panel?.dispose();
+            this.onGroupUpdated();
+        }, 1500);
+    }
+
+    private async showError(message: string) {
+        // Show error
+        await this.panel?.webview.postMessage({
+            command: 'setLoading',
+            loading: false
+        });
+
+        await this.panel?.webview.postMessage({
+            command: 'showError',
+            message
+        });
+    }
+
     private getWebviewContent(): string {
-        const currentColor = this.group.color || 'blue';
+        const currentColor = this.group.color ?? 'blue';
         
         return `<!DOCTYPE html>
 <html lang="en">
@@ -294,7 +331,7 @@ export class EditEnvironmentGroupWebview {
         <div class="group-info">
             <strong>Group:</strong> ${this.group.name}<br>
             ${this.group.description ? `<strong>Description:</strong> ${this.group.description}<br>` : ''}
-            <strong>Current Color:</strong> ${this.group.color || 'blue'}<br>
+            <strong>Current Color:</strong> ${this.group.color ?? 'blue'}<br>
             <strong>Created:</strong> ${new Date(this.group.createdAt).toLocaleDateString()}
         </div>
     </div>
@@ -305,10 +342,52 @@ export class EditEnvironmentGroupWebview {
                 <label for="name">Group Name <span class="required">*</span></label>
                 <input type="text" id="name" name="name" value="${this.group.name}" placeholder="e.g., Development Environments, Production Environments" required>
             </div>
+              <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" placeholder="Brief description of this environment group (optional)">${this.group.description ?? ''}</textarea>
+            </div>
             
             <div class="form-group">
-                <label for="description">Description</label>
-                <textarea id="description" name="description" placeholder="Brief description of this environment group (optional)">${this.group.description || ''}</textarea>
+                <label for="authType">Default Authentication Type</label>
+                <select id="authType" name="authType">
+                    <option value="none" ${(this.group.defaultAuth?.type ?? 'none') === 'none' ? 'selected' : ''}>🚫 No Authentication</option>
+                    <option value="apikey" ${(this.group.defaultAuth?.type ?? 'none') === 'apikey' ? 'selected' : ''}>🔑 API Key</option>
+                    <option value="bearer" ${(this.group.defaultAuth?.type ?? 'none') === 'bearer' ? 'selected' : ''}>🎫 Bearer Token</option>
+                    <option value="basic" ${(this.group.defaultAuth?.type ?? 'none') === 'basic' ? 'selected' : ''}>👤 Basic Authentication</option>
+                </select>
+                <small style="color: var(--vscode-descriptionForeground); margin-top: 5px; display: block;">
+                    This authentication will be used as the default for all environments in this group. Individual environments can override this setting.
+                </small>
+            </div>
+
+            <!-- API Key Authentication Fields -->
+            <div class="form-group auth-fields" id="apiKeyFields" style="display: none;">
+                <label for="apiKey">API Key <span class="required">*</span></label>
+                <input type="password" id="apiKey" name="apiKey" placeholder="Enter your API key">
+                
+                <label for="apiKeyLocation" style="margin-top: 15px;">API Key Location</label>
+                <select id="apiKeyLocation" name="apiKeyLocation">
+                    <option value="header" ${(this.group.defaultAuth?.apiKeyLocation ?? 'header') === 'header' ? 'selected' : ''}>HTTP Header</option>
+                    <option value="query" ${(this.group.defaultAuth?.apiKeyLocation ?? 'header') === 'query' ? 'selected' : ''}>Query Parameter</option>
+                </select>
+                
+                <label for="apiKeyName" style="margin-top: 15px;">API Key Name</label>
+                <input type="text" id="apiKeyName" name="apiKeyName" value="${this.group.defaultAuth?.apiKeyName ?? 'X-API-Key'}" placeholder="e.g., X-API-Key, Authorization">
+            </div>
+
+            <!-- Bearer Token Authentication Fields -->
+            <div class="form-group auth-fields" id="bearerFields" style="display: none;">
+                <label for="bearerToken">Bearer Token <span class="required">*</span></label>
+                <input type="password" id="bearerToken" name="bearerToken" placeholder="Enter your bearer token">
+            </div>
+
+            <!-- Basic Authentication Fields -->
+            <div class="form-group auth-fields" id="basicFields" style="display: none;">
+                <label for="username">Username <span class="required">*</span></label>
+                <input type="text" id="username" name="username" value="${this.group.defaultAuth?.username ?? ''}" placeholder="Enter username">
+                
+                <label for="password" style="margin-top: 15px;">Password <span class="required">*</span></label>
+                <input type="password" id="password" name="password" placeholder="Enter password">
             </div>
             
             <div class="form-group">
@@ -355,14 +434,42 @@ export class EditEnvironmentGroupWebview {
                 command: 'submitForm',
                 data: data
             });
-        });
-
-        // Handle color change
+        });        // Handle color change
         document.getElementById('color').addEventListener('change', function(e) {
             const color = e.target.value;
             const preview = document.getElementById('colorPreview');
             preview.className = 'color-circle color-' + color;
         });
+
+        // Handle authentication type change
+        document.getElementById('authType').addEventListener('change', function(e) {
+            const authType = e.target.value;
+            const authFields = document.querySelectorAll('.auth-fields');
+            
+            // Hide all auth fields
+            authFields.forEach(field => {
+                field.style.display = 'none';
+            });
+            
+            // Show relevant auth fields
+            switch (authType) {
+                case 'apikey':
+                    document.getElementById('apiKeyFields').style.display = 'block';
+                    break;
+                case 'bearer':
+                    document.getElementById('bearerFields').style.display = 'block';
+                    break;
+                case 'basic':
+                    document.getElementById('basicFields').style.display = 'block';
+                    break;
+            }
+        });
+
+        // Initialize auth fields visibility
+        const initialAuthType = document.getElementById('authType').value;
+        if (initialAuthType !== 'none') {
+            document.getElementById('authType').dispatchEvent(new Event('change'));
+        }
 
         // Handle messages from extension
         window.addEventListener('message', function(event) {

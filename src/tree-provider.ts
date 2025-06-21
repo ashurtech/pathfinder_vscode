@@ -687,8 +687,29 @@ class SchemaEnvironmentGroupTreeItem extends TreeItem {
         
         const iconColor = group.color ?? 'yellow';
         this.iconPath = new vscode.ThemeIcon('folder', new vscode.ThemeColor(`charts.${iconColor}`));
-        this.tooltip = `${group.name}\n${group.description ?? 'No description'}`;
-        this.description = group.description;
+        
+        // Build tooltip with authentication info
+        let tooltip = `${group.name}\n${group.description ?? 'No description'}`;
+        if (group.defaultAuth?.type && group.defaultAuth.type !== 'none') {
+            tooltip += `\n🔐 Default Auth: ${group.defaultAuth.type.toUpperCase()}`;
+        }
+        
+        this.tooltip = tooltip;
+          // Add auth indicator to description
+        let description = group.description;
+        if (group.defaultAuth?.type && group.defaultAuth.type !== 'none') {
+            let authIcon = '🔐';
+            if (group.defaultAuth.type === 'apikey') {
+                authIcon = '🔑';
+            } else if (group.defaultAuth.type === 'bearer') {
+                authIcon = '🎫';
+            } else if (group.defaultAuth.type === 'basic') {
+                authIcon = '👤';
+            }
+            description = description ? `${authIcon} ${description}` : `${authIcon} Auth configured`;
+        }
+        this.description = description;
+        
         this.contextValue = 'schemaEnvironmentGroup';
     }
 }

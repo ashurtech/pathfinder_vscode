@@ -275,9 +275,8 @@
         "extensions": [".http", ".rest"],
         "configuration": "./language-configuration.json"
       }
-    ],
-    "views": {
-      "explorer": [
+    ],    "views": {
+      "pathfinder-sidebar-view": [
         {
           "id": "pathfinderExplorer",
           "name": "Pathfinder - api explorer",
@@ -396,14 +395,12 @@
           "group": "management"
         }
       ]
-    },
-    "viewsContainers": {
+    },    "viewsContainers": {
       "activitybar": [
         {
           "id": "pathfinder-sidebar-view",
           "title": "Pathfinder",
-          "icon": "resources/pathfinder-icon.png",
-          "badge": "resources/pathfinder-icon.svg"
+          "icon": "resources/pathfinder-icon.svg"
         }
       ]
     }
