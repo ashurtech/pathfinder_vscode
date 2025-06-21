@@ -25,50 +25,25 @@ export class HttpRequestParser {
     /**
      * Parses an HTTP request from cell content with variable substitution
      * (Alias method expected by tests)
-     */
-    parse(content: string, variables: VariableContext = {}): ParsedHttpRequest {
+     */    parse(content: string, variables: VariableContext = {}): ParsedHttpRequest {
         // Substitute variables first
         const substitutedContent = this.substituteVariables(content, variables);
+        const lines = substitutedContent.split('\n');
         
-        // Split content into lines
-        const lines = substitutedContent.split('\n').map(line => line.trim());
-        
-        // Parse request line (first non-empty line)
-        const requestLineIndex = lines.findIndex(line => line.length > 0);
-        if (requestLineIndex === -1) {
+        // Get non-comment lines for parsing structure
+        const nonCommentLines = this.filterNonCommentLines(lines);
+        if (nonCommentLines.length === 0) {
             throw new Error('No request line found');
         }
         
-        const requestLine = lines[requestLineIndex];
-        const { method, url } = this.parseRequestLine(requestLine);
+        // Parse request line
+        const { method, url } = this.parseRequestLine(nonCommentLines[0].line);
         
-        // Parse headers
-        const headers: Record<string, string> = {};
-        let bodyStart = -1;
+        // Parse headers and find body start
+        const { headers, bodyStartIndex } = this.parseHeaders(nonCommentLines);
         
-        for (let i = requestLineIndex + 1; i < lines.length; i++) {
-            const line = lines[i];
-            
-            if (line === '') {
-                // Empty line indicates start of body
-                bodyStart = i + 1;
-                break;
-            }
-            
-            if (line.includes(':')) {
-                const [key, ...valueParts] = line.split(':');
-                headers[key.trim()] = valueParts.join(':').trim();
-            }
-        }
-        
-        // Parse body
-        let body: string | undefined;
-        if (bodyStart > -1 && bodyStart < lines.length) {
-            const bodyLines = lines.slice(bodyStart).filter(line => line.length > 0);
-            if (bodyLines.length > 0) {
-                body = bodyLines.join('\n');
-            }
-        }
+        // Parse body preserving original formatting
+        const body = this.parseBody(lines, bodyStartIndex);
         
         return {
             method: method.toUpperCase(),
@@ -79,20 +54,102 @@ export class HttpRequestParser {
     }
 
     /**
+     * Filters out comment-only lines and returns line info
+     */
+    private filterNonCommentLines(lines: string[]): { line: string; originalIndex: number }[] {
+        const nonCommentLines: { line: string; originalIndex: number }[] = [];
+        lines.forEach((line, index) => {
+            const trimmed = line.trim();
+            if (trimmed && !trimmed.startsWith('#')) {
+                nonCommentLines.push({ line: trimmed, originalIndex: index });
+            }
+        });
+        return nonCommentLines;
+    }
+
+    /**
+     * Parses headers and determines body start index
+     */
+    private parseHeaders(nonCommentLines: { line: string; originalIndex: number }[]): {
+        headers: Record<string, string>;
+        bodyStartIndex: number;
+    } {
+        const headers: Record<string, string> = {};
+        let bodyStartIndex = -1;
+        
+        for (let i = 1; i < nonCommentLines.length; i++) {
+            const lineItem = nonCommentLines[i];
+            const line = lineItem.line;
+            
+            if (line === '') {
+                bodyStartIndex = lineItem.originalIndex + 1;
+                break;
+            }
+              if (line.includes(':')) {
+                const colonIndex = line.indexOf(':');
+                const key = line.substring(0, colonIndex).trim();
+                let value = line.substring(colonIndex + 1).trim();
+                
+                // Strip inline comments from header values
+                const commentIndex = value.indexOf('#');
+                if (commentIndex !== -1) {
+                    value = value.substring(0, commentIndex).trim();
+                }
+                
+                headers[key] = value;
+            } else {
+                bodyStartIndex = lineItem.originalIndex;
+                break;
+            }
+        }
+        
+        return { headers, bodyStartIndex };
+    }
+
+    /**
+     * Parses body content preserving original formatting
+     */
+    private parseBody(lines: string[], bodyStartIndex: number): string | undefined {
+        if (bodyStartIndex <= -1 || bodyStartIndex >= lines.length) {
+            return undefined;
+        }
+        
+        const bodyLines = lines.slice(bodyStartIndex);
+        
+        // Remove leading empty lines
+        let startIdx = 0;
+        while (startIdx < bodyLines.length && bodyLines[startIdx].trim() === '') {
+            startIdx++;
+        }
+        
+        // Remove trailing empty lines
+        let endIdx = bodyLines.length - 1;
+        while (endIdx >= startIdx && bodyLines[endIdx].trim() === '') {
+            endIdx--;
+        }
+        
+        if (startIdx <= endIdx) {
+            return bodyLines.slice(startIdx, endIdx + 1).join('\n');
+        }
+        
+        return undefined;
+    }/**
      * Parses the request line (method and URL)
      */
     private parseRequestLine(line: string): { method: string; url: string } {
-        const parts = line.split(/\s+/);
+        // Remove comments and trim
+        const cleanLine = line.split('#')[0].trim();
+        const parts = cleanLine.split(/\s+/);
         
         if (parts.length < 2) {
-            throw new Error(`Invalid request line: ${line}`);
+            throw new Error(`Invalid HTTP request format. Expected: METHOD URL, got: ${line}`);
         }
         
         const method = parts[0];
         const url = parts[1];
         
         if (!this.isValidHttpMethod(method)) {
-            throw new Error(`Invalid HTTP method: ${method}`);
+            throw new Error(`Invalid HTTP method: ${method}. Valid methods: GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS`);
         }
         
         return { method, url };

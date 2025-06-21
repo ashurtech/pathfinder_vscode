@@ -11,7 +11,7 @@
 import * as vscode from 'vscode';
 import { ConfigurationManager } from '../configuration';
 import { EndpointInfo, SchemaEnvironment } from '../types';
-import { HttpRequestExecutor } from './http-request-executor';
+import { HttpRequestExecutor, HttpExecutionResult, ParsedHttpRequest } from './http-request-executor';
 import { HttpRequestParser } from './http-request-parser';
 
 /**
@@ -156,9 +156,7 @@ export class NotebookController {
             ]));
             execution.end(false, Date.now());
         }
-    }
-
-    /**
+    }    /**
      * Executes an HTTP cell
      */
     private async executeHttpCell(
@@ -175,8 +173,26 @@ export class NotebookController {
             this.variableContext = { ...this.variableContext, ...result.data };
         }
 
-        // Create output with response data
+        // Create detailed outputs showing both request and response
+        const requestDetails = this.formatRequestDetails(parsedRequest);
+        const responseDetails = this.formatResponseDetails(result);
+
         const outputs = [
+            // Request details (collapsed by default)
+            new vscode.NotebookCellOutput([
+                vscode.NotebookCellOutputItem.text(
+                    `📤 REQUEST DETAILS\n${'='.repeat(50)}\n${requestDetails}`,
+                    'text/plain'
+                )
+            ]),
+            // Response details
+            new vscode.NotebookCellOutput([
+                vscode.NotebookCellOutputItem.text(
+                    `📥 RESPONSE\n${'='.repeat(50)}\n${responseDetails}`,
+                    'text/plain'
+                )
+            ]),
+            // JSON response data (for easy variable extraction)
             new vscode.NotebookCellOutput([
                 vscode.NotebookCellOutputItem.json(result, 'application/json')
             ])
@@ -213,20 +229,31 @@ export class NotebookController {
 
     /**
      * Generates notebook cells for a given endpoint
-     */
-    private async generateCellsForEndpoint(
+     */    private async generateCellsForEndpoint(
         endpoint: EndpointInfo,
         schemaId: string,
         environmentId?: string
     ): Promise<vscode.NotebookCellData[]> {
         const cells: vscode.NotebookCellData[] = [];
 
-        // Add title cell
+        // Add title cell with endpoint description
+        const title = endpoint.summary ?? `${endpoint.method.toUpperCase()} ${endpoint.path}`;
+        const description = endpoint.description ?? 'No description available';
         cells.push(new vscode.NotebookCellData(
             vscode.NotebookCellKind.Markup,
-            `# ${endpoint.method.toUpperCase()} ${endpoint.path}\n\n${endpoint.description ?? 'No description available'}`,
+            `# ${title}\n\n${description}`,
             'markdown'
         ));
+
+        // Add endpoint details (parameters, etc.) - collapsed by default
+        const detailsMarkdown = await this.generateEndpointDetails(endpoint, schemaId, environmentId);
+        if (detailsMarkdown) {
+            cells.push(new vscode.NotebookCellData(
+                vscode.NotebookCellKind.Markup,
+                detailsMarkdown,
+                'markdown'
+            ));
+        }
 
         // Add environment selection if multiple environments available
         const environments = await this.configManager.getSchemaEnvironments(schemaId);
@@ -243,9 +270,7 @@ export class NotebookController {
             vscode.NotebookCellKind.Code,
             '{\n  "baseUrl": "{{baseUrl}}",\n  "apiKey": "{{apiKey}}"\n}',
             'json'
-        ));
-
-        // Add HTTP request cell
+        ));        // Add HTTP request cell
         const httpRequest = this.generateHttpRequest(endpoint, environmentId);
         cells.push(new vscode.NotebookCellData(
             vscode.NotebookCellKind.Code,
@@ -254,6 +279,104 @@ export class NotebookController {
         ));
 
         return cells;
+    }
+
+    /**
+     * Generates endpoint details documentation
+     */
+    private async generateEndpointDetails(
+        endpoint: EndpointInfo,
+        schemaId: string,
+        environmentId?: string
+    ): Promise<string> {
+        const sections: string[] = [];
+
+        // Add parameters section
+        const paramsSection = this.generateParametersSection(endpoint);
+        if (paramsSection) {
+            sections.push(paramsSection);
+        }
+
+        // Add request body section
+        const bodySection = this.generateRequestBodySection(endpoint);
+        if (bodySection) {
+            sections.push(bodySection);
+        }
+
+        // Add response section
+        const responseSection = this.generateResponseSection(endpoint);
+        if (responseSection) {
+            sections.push(responseSection);
+        }
+
+        return sections.join('\n');
+    }
+
+    /**
+     * Generates parameters documentation section
+     */
+    private generateParametersSection(endpoint: EndpointInfo): string {
+        if (!endpoint.parameters || endpoint.parameters.length === 0) {
+            return '';
+        }
+
+        let section = '\n<details>\n<summary>📋 Parameters</summary>\n\n';
+        
+        const pathParams = endpoint.parameters.filter(p => p.in === 'path');
+        const queryParams = endpoint.parameters.filter(p => p.in === 'query');
+        const headerParams = endpoint.parameters.filter(p => p.in === 'header');
+        
+        if (pathParams.length > 0) {
+            section += '### Path Parameters\n';
+            section += this.formatParameters(pathParams);
+        }
+        
+        if (queryParams.length > 0) {
+            section += '### Query Parameters\n';
+            section += this.formatParameters(queryParams);
+        }
+        
+        if (headerParams.length > 0) {
+            section += '### Header Parameters\n';
+            section += this.formatParameters(headerParams);
+        }
+        
+        section += '</details>\n';
+        return section;
+    }
+
+    /**
+     * Formats parameter list
+     */
+    private formatParameters(params: any[]): string {
+        let formatted = '';
+        for (const param of params) {
+            const required = param.required ? ' **(required)**' : ' *(optional)*';
+            formatted += `- **${param.name}**${required}: ${param.description ?? 'No description'}\n`;
+        }
+        return formatted + '\n';
+    }
+
+    /**
+     * Generates request body documentation section
+     */
+    private generateRequestBodySection(endpoint: EndpointInfo): string {
+        if (!['POST', 'PUT', 'PATCH'].includes(endpoint.method.toUpperCase())) {
+            return '';
+        }
+
+        return '\n<details>\n<summary>📤 Request Body</summary>\n\n' +
+               '```json\n{\n  "example": "data"\n}\n```\n' +
+               '</details>\n';
+    }
+
+    /**
+     * Generates response documentation section
+     */
+    private generateResponseSection(endpoint: EndpointInfo): string {
+        return '\n<details>\n<summary>📥 Response Schema</summary>\n\n' +
+               '**Success Response:**\n```json\n{\n  "result": "success"\n}\n```\n' +
+               '</details>\n';
     }
 
     /**
@@ -367,5 +490,62 @@ export class NotebookController {
         }
         
         return variables;
+    }
+
+    /**
+     * Formats request details for display
+     */
+    private formatRequestDetails(request: ParsedHttpRequest): string {
+        let details = `Method: ${request.method}\n`;
+        details += `URL: ${request.url}\n\n`;
+        
+        if (Object.keys(request.headers).length > 0) {
+            details += 'Headers:\n';
+            for (const [key, value] of Object.entries(request.headers)) {
+                details += `  ${key}: ${value}\n`;
+            }
+            details += '\n';
+        }
+        
+        if (request.body) {
+            details += 'Body:\n';
+            try {
+                const formatted = JSON.stringify(JSON.parse(request.body), null, 2);
+                details += formatted;
+            } catch {
+                details += request.body;
+            }
+        }
+        
+        return details;
+    }    /**
+     * Formats response details for display
+     */
+    private formatResponseDetails(result: HttpExecutionResult): string {
+        let details = `Status: ${result.status} ${result.statusText}\n`;
+        
+        // Handle both timing formats
+        const timing = typeof result.timing === 'number' ? result.timing : result.timing.duration;
+        details += `Time: ${timing}ms\n\n`;
+        
+        if (Object.keys(result.headers).length > 0) {
+            details += 'Headers:\n';
+            for (const [key, value] of Object.entries(result.headers)) {
+                details += `  ${key}: ${value}\n`;
+            }
+            details += '\n';
+        }
+        
+        if (result.body) {
+            details += 'Body:\n';
+            try {
+                const formatted = JSON.stringify(JSON.parse(result.body), null, 2);
+                details += formatted;
+            } catch {
+                details += result.body;
+            }
+        }
+        
+        return details;
     }
 }
