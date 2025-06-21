@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { ApiSchema } from './types';
 import { SchemaLoader } from './schema-loader';
 import { ConfigurationManager } from './configuration';
+import { getPopularIcons, getAllAvailableIcons, getSchemaIcon } from './schema-icon-mapper';
 import axios from 'axios';
 
 export class SchemaManagementWebview {
@@ -43,9 +44,7 @@ export class SchemaManagementWebview {
             }
         );
 
-        this.panel.webview.html = this.getWebviewContent();
-
-        // Handle messages from the webview
+        this.panel.webview.html = this.getWebviewContent();        // Handle messages from the webview
         this.panel.webview.onDidReceiveMessage(
             async (message) => {
                 switch (message.command) {
@@ -57,6 +56,15 @@ export class SchemaManagementWebview {
                         break;
                     case 'updateSchema':
                         await this.updateSchema();
+                        break;
+                    case 'saveIconOverride':
+                        await this.saveIconOverride(message.iconSettings);
+                        break;
+                    case 'getPopularIcons':
+                        this.sendPopularIcons();
+                        break;
+                    case 'searchIcons':
+                        this.searchIcons(message.query);
                         break;
                 }
             },
@@ -229,6 +237,87 @@ export class SchemaManagementWebview {
                 command: 'updateComplete',
                 success: false,
                 message: `Failed to update schema: ${error?.message ?? 'Unknown error'}`
+            });
+        }
+    }
+
+    /**
+     * Save icon override settings for the schema
+     */
+    private async saveIconOverride(iconSettings: any) {
+        try {
+            // Initialize iconOverride if it doesn't exist
+            if (!this.schema.iconOverride) {
+                this.schema.iconOverride = {};
+            }
+
+            // Update the icon override settings
+            this.schema.iconOverride.useBrandIcon = iconSettings.useBrandIcon;
+            this.schema.iconOverride.manualIconName = iconSettings.manualIconName;
+            this.schema.iconOverride.fallbackToColorIcon = iconSettings.fallbackToColorIcon;
+
+            // Save the updated schema
+            await this.configManager.saveApiSchema(this.schema);
+            
+            this.panel?.webview.postMessage({
+                command: 'iconOverrideSaved',
+                success: true,
+                message: 'Icon settings saved successfully!'
+            });
+
+            // Refresh the tree view to show updated icon
+            vscode.commands.executeCommand('pathfinder.refreshTreeView');
+            
+        } catch (error: any) {
+            this.panel?.webview.postMessage({
+                command: 'iconOverrideSaved',
+                success: false,
+                message: `Failed to save icon settings: ${error?.message ?? 'Unknown error'}`
+            });
+        }
+    }
+
+    /**
+     * Send popular icons to the webview
+     */
+    private sendPopularIcons() {
+        try {
+            const popularIcons = getPopularIcons();
+            this.panel?.webview.postMessage({
+                command: 'popularIconsLoaded',
+                icons: popularIcons
+            });
+        } catch (error: any) {
+            this.panel?.webview.postMessage({
+                command: 'popularIconsLoaded',
+                icons: [],
+                error: error?.message ?? 'Failed to load popular icons'
+            });
+        }
+    }
+
+    /**
+     * Search for icons matching the query
+     */
+    private searchIcons(query: string) {
+        try {
+            const allIcons = getAllAvailableIcons();
+            const filteredIcons = allIcons.filter(icon => 
+                icon.title.toLowerCase().includes(query.toLowerCase()) ||
+                icon.slug.toLowerCase().includes(query.toLowerCase())
+            ).slice(0, 50); // Limit results
+
+            this.panel?.webview.postMessage({
+                command: 'iconSearchResults',
+                icons: filteredIcons,
+                query: query
+            });
+        } catch (error: any) {
+            this.panel?.webview.postMessage({
+                command: 'iconSearchResults',
+                icons: [],
+                query: query,
+                error: error?.message ?? 'Failed to search icons'
             });
         }
     }
@@ -438,8 +527,7 @@ export class SchemaManagementWebview {
                 Check for Updates
                 <span class="loading" id="checkLoading">⏳</span>
             </button>
-            
-            <button 
+              <button 
                 class="button button-primary" 
                 id="updateBtn"
                 onclick="updateSchema()"
@@ -449,10 +537,139 @@ export class SchemaManagementWebview {
                 <span class="loading" id="updateLoading">⏳</span>
             </button>
         </div>
+        
+        <!-- Icon Management -->
+        <div class="section">
+            <h2>🎨 Icon Management</h2>
+            <p>Customize the brand icon displayed for this schema in the tree view.</p>
+            
+            <div class="form-group">
+                <label>Current Icon Setting:</label>
+                <div id="currentIconDisplay">
+                    <span id="currentIconPreview"></span>
+                    <span id="currentIconDescription">Loading...</span>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="radio" name="iconChoice" value="auto" id="iconAuto" checked>
+                    Auto-detect brand icon (recommended)
+                </label>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="radio" name="iconChoice" value="manual" id="iconManual">
+                    Choose a specific icon
+                </label>
+                <div id="iconSelectionArea" style="display: none; margin-top: 10px;">
+                    <div class="form-group">
+                        <input type="text" id="iconSearch" placeholder="Search icons..." style="margin-bottom: 10px;">
+                    </div>
+                    <div id="popularIcons">
+                        <h4>Popular Icons:</h4>
+                        <div id="popularIconGrid" class="icon-grid"></div>
+                    </div>
+                    <div id="searchResults" style="display: none;">
+                        <h4>Search Results:</h4>
+                        <div id="searchResultsGrid" class="icon-grid"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="selectedIconName">Selected Icon:</label>
+                        <input type="text" id="selectedIconName" readonly placeholder="No icon selected">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="radio" name="iconChoice" value="none" id="iconNone">
+                    No icon (disable brand icon)
+                </label>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="fallbackToColor" checked>
+                    Use fallback color icon when brand icon is not available
+                </label>
+            </div>
+            
+            <button class="button button-primary" onclick="saveIconSettings()">
+                Save Icon Settings
+            </button>
+        </div>
     </div>
+
+    <style>
+        .icon-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid var(--vscode-panel-border);
+            padding: 10px;
+            border-radius: 4px;
+        }
+        
+        .icon-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .icon-item:hover {
+            background: var(--vscode-list-hoverBackground);
+            border-color: var(--vscode-focusBorder);
+        }
+        
+        .icon-item.selected {
+            background: var(--vscode-list-activeSelectionBackground);
+            border-color: var(--vscode-focusBorder);
+        }
+        
+        .icon-item svg {
+            width: 24px;
+            height: 24px;
+            fill: var(--vscode-foreground);
+        }
+        
+        .icon-item .icon-title {
+            font-size: 10px;
+            text-align: center;
+            margin-top: 4px;
+            word-break: break-word;
+        }
+        
+        #currentIconDisplay {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            background: var(--vscode-input-background);
+        }
+        
+        #currentIconPreview svg {
+            width: 24px;
+            height: 24px;
+            fill: var(--vscode-foreground);
+        }
+    </style>
 
     <script>
         const vscode = acquireVsCodeApi();
+        
+        // Initialize icon management
+        initializeIconManagement();
         
         function saveUrl() {
             const url = document.getElementById('schemaUrl').value;
@@ -477,10 +694,155 @@ export class SchemaManagementWebview {
                 command: 'updateSchema'
             });
         }
-        
-        function showStatus(message, type = 'info') {
+          function showStatus(message, type = 'info') {
             const statusDiv = document.getElementById('statusMessage');
             statusDiv.innerHTML = '<div class="status-message status-' + type + '">' + message + '</div>';
+        }
+        
+        // Icon management functions
+        function initializeIconManagement() {
+            // Set up current icon settings based on schema
+            const iconOverride = ${JSON.stringify(this.schema.iconOverride || {})};
+            
+            // Set radio buttons based on current settings
+            if (iconOverride.useBrandIcon === false) {
+                document.getElementById('iconNone').checked = true;
+            } else if (iconOverride.manualIconName) {
+                document.getElementById('iconManual').checked = true;
+                document.getElementById('selectedIconName').value = iconOverride.manualIconName;
+                showIconSelection();
+            } else {
+                document.getElementById('iconAuto').checked = true;
+            }
+            
+            // Set fallback checkbox
+            document.getElementById('fallbackToColor').checked = iconOverride.fallbackToColorIcon !== false;
+            
+            // Update current icon display
+            updateCurrentIconDisplay();
+            
+            // Set up radio button listeners
+            document.querySelectorAll('input[name="iconChoice"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    if (this.value === 'manual') {
+                        showIconSelection();
+                    } else {
+                        hideIconSelection();
+                    }
+                    updateCurrentIconDisplay();
+                });
+            });
+            
+            // Set up search functionality
+            const searchInput = document.getElementById('iconSearch');
+            let searchTimeout;
+            searchInput.addEventListener('input', function() {
+                clearTimeout(searchTimeout);
+                searchTimeout = setTimeout(() => {
+                    if (this.value.trim()) {
+                        vscode.postMessage({
+                            command: 'searchIcons',
+                            query: this.value.trim()
+                        });
+                        document.getElementById('searchResults').style.display = 'block';
+                    } else {
+                        document.getElementById('searchResults').style.display = 'none';
+                    }
+                }, 300);
+            });
+            
+            // Load popular icons initially
+            vscode.postMessage({ command: 'getPopularIcons' });
+        }
+        
+        function showIconSelection() {
+            document.getElementById('iconSelectionArea').style.display = 'block';
+        }
+        
+        function hideIconSelection() {
+            document.getElementById('iconSelectionArea').style.display = 'none';
+        }
+        
+        function updateCurrentIconDisplay() {
+            const iconChoice = document.querySelector('input[name="iconChoice"]:checked').value;
+            const preview = document.getElementById('currentIconPreview');
+            const description = document.getElementById('currentIconDescription');
+            
+            if (iconChoice === 'none') {
+                preview.innerHTML = '🚫';
+                description.textContent = 'No icon (brand icon disabled)';
+            } else if (iconChoice === 'manual') {
+                const selectedIcon = document.getElementById('selectedIconName').value;
+                if (selectedIcon) {
+                    preview.innerHTML = '🎯';
+                    description.textContent = 'Manual icon: ' + selectedIcon;
+                } else {
+                    preview.innerHTML = '❓';
+                    description.textContent = 'Manual icon: (none selected)';
+                }
+            } else {
+                preview.innerHTML = '🤖';
+                description.textContent = 'Auto-detected brand icon';
+            }
+        }
+        
+        function selectIcon(slug, svg, title) {
+            // Clear previous selections
+            document.querySelectorAll('.icon-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            
+            // Mark new selection
+            event.target.closest('.icon-item').classList.add('selected');
+            
+            // Update selected icon
+            document.getElementById('selectedIconName').value = slug;
+            document.getElementById('iconManual').checked = true;
+            
+            updateCurrentIconDisplay();
+        }
+        
+        function saveIconSettings() {
+            const iconChoice = document.querySelector('input[name="iconChoice"]:checked').value;
+            const fallbackToColor = document.getElementById('fallbackToColor').checked;
+            
+            const iconSettings = {
+                fallbackToColorIcon: fallbackToColor
+            };
+            
+            if (iconChoice === 'none') {
+                iconSettings.useBrandIcon = false;
+                iconSettings.manualIconName = undefined;
+            } else if (iconChoice === 'manual') {
+                iconSettings.useBrandIcon = true;
+                iconSettings.manualIconName = document.getElementById('selectedIconName').value || undefined;
+            } else {
+                iconSettings.useBrandIcon = true;
+                iconSettings.manualIconName = undefined;
+            }
+            
+            vscode.postMessage({
+                command: 'saveIconOverride',
+                iconSettings: iconSettings
+            });
+        }
+        
+        function renderIconGrid(icons, containerId) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            icons.forEach(icon => {
+                const iconItem = document.createElement('div');
+                iconItem.className = 'icon-item';
+                iconItem.onclick = () => selectIcon(icon.slug, icon.svg, icon.title);
+                
+                iconItem.innerHTML = \`
+                    <div>\${icon.svg}</div>
+                    <div class="icon-title">\${icon.title}</div>
+                \`;
+                
+                container.appendChild(iconItem);
+            });
         }
         
         // Handle messages from the extension
@@ -494,6 +856,30 @@ export class SchemaManagementWebview {
                         document.getElementById('checkUpdatesBtn').disabled = false;
                     } else {
                         showStatus(message.message, 'error');
+                    }
+                    break;
+                    
+                case 'iconOverrideSaved':
+                    if (message.success) {
+                        showStatus(message.message, 'success');
+                    } else {
+                        showStatus(message.message, 'error');
+                    }
+                    break;
+                    
+                case 'popularIconsLoaded':
+                    if (message.icons && message.icons.length > 0) {
+                        renderIconGrid(message.icons, 'popularIconGrid');
+                    } else {
+                        document.getElementById('popularIconGrid').innerHTML = '<p>No popular icons available</p>';
+                    }
+                    break;
+                    
+                case 'iconSearchResults':
+                    if (message.icons && message.icons.length > 0) {
+                        renderIconGrid(message.icons, 'searchResultsGrid');
+                    } else {
+                        document.getElementById('searchResultsGrid').innerHTML = '<p>No icons found for "' + message.query + '"</p>';
                     }
                     break;
                     

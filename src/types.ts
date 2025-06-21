@@ -371,9 +371,20 @@ export interface ApiSchema {
     
     /** Version/tag from the OpenAPI spec */
     version: string;
-    
-    /** Color/icon theme for visual distinction */
+      /** Color/icon theme for visual distinction */
     color?: 'blue' | 'green' | 'orange' | 'purple' | 'red' | 'yellow';
+    
+    /** Icon override settings */
+    iconOverride?: {
+        /** Whether to use brand icons (auto-detected) */
+        useBrandIcon?: boolean;
+        
+        /** Manually specified icon name (from simple-icons) */
+        manualIconName?: string;
+        
+        /** Fallback to color-coded icon when brand icon not found */
+        fallbackToColorIcon?: boolean;
+    };
     
     /** Optional group membership */
     groupId?: string;

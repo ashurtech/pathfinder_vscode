@@ -13,6 +13,7 @@
 import * as vscode from 'vscode';
 import { ConfigurationManager } from './configuration';
 import { SchemaLoader } from './schema-loader';
+import { getSchemaIcon } from './schema-icon-mapper';
 import { 
     ApiEndpoint,
     ApiSchema,
@@ -648,9 +649,24 @@ class ApiSchemaTreeItem extends TreeItem {
                 console.warn('Failed to extract endpoints for schema:', error);
             }        }
         
-        const iconColor = schema.color ?? 'blue';
-        this.iconPath = new vscode.ThemeIcon('file-code', new vscode.ThemeColor(`charts.${iconColor}`));
-        this.tooltip = `${schema.name}\nVersion: ${schema.version}\nEndpoints: ${endpointCount}`;
+        // Try to get a brand icon for this schema
+        const brandIcon = getSchemaIcon(schema.schema, schema.name, schema.source);
+        
+        if (brandIcon) {
+            // Create a data URI for the SVG icon
+            const svgDataUri = `data:image/svg+xml;base64,${Buffer.from(brandIcon.iconSvg).toString('base64')}`;
+            this.iconPath = {
+                light: vscode.Uri.parse(svgDataUri),
+                dark: vscode.Uri.parse(svgDataUri)
+            };
+            this.tooltip = `${schema.name}\nVersion: ${schema.version}\nEndpoints: ${endpointCount}\nBrand: ${brandIcon.iconName}`;
+        } else {
+            // Fallback to color-coded icon
+            const iconColor = schema.color ?? 'blue';
+            this.iconPath = new vscode.ThemeIcon('file-code', new vscode.ThemeColor(`charts.${iconColor}`));
+            this.tooltip = `${schema.name}\nVersion: ${schema.version}\nEndpoints: ${endpointCount}`;
+        }
+        
         this.description = `v${schema.version}`;
         this.contextValue = 'apiSchema';
     }

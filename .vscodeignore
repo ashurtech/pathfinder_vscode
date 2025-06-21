@@ -37,3 +37,4 @@ test-*.ipynb
 jest.config.js
 package-lock.json
 ROOT_CLEANUP_PLAN.md
+ROOT_CLEANUP_COMPLETE.md
