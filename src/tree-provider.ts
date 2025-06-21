@@ -38,10 +38,10 @@ export class ApiTreeProvider implements vscode.TreeDataProvider<TreeItem>, vscod
     // Event emitter for when tree data changes (triggers refresh)
     private readonly _onDidChangeTreeData: vscode.EventEmitter<TreeDataChangeEvent> = new vscode.EventEmitter<TreeDataChangeEvent>();
     readonly onDidChangeTreeData: vscode.Event<TreeDataChangeEvent> = this._onDidChangeTreeData.event;
-    
-    constructor(
+      constructor(
         private readonly configManager: ConfigurationManager,
-        private readonly schemaLoader: SchemaLoader
+        private readonly schemaLoader: SchemaLoader,
+        private readonly notebookController?: any // NotebookController - avoiding circular import
     ) {}
     
     /**
@@ -771,7 +771,6 @@ class EditSchemaGroupActionTreeItem extends TreeItem {
         this.command = {
             command: 'pathfinder.editSchemaGroup',
             title: 'Edit Environment Group',
-            arguments: [group]
-        };
+            arguments: [group]        };
     }
 }

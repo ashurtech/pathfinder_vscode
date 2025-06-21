@@ -40,12 +40,14 @@ export interface VariableContext {
 }
 
 export class NotebookController {
-    private controller: vscode.NotebookController;
-    private httpExecutor: HttpRequestExecutor;
-    private httpParser: HttpRequestParser;
-    private variableContext: VariableContext = {};    constructor(
-        private context: vscode.ExtensionContext,
-        private configManager: ConfigurationManager
+    private readonly controller: vscode.NotebookController;
+    private readonly httpExecutor: HttpRequestExecutor;
+    private readonly httpParser: HttpRequestParser;
+    private variableContext: VariableContext = {};
+
+    constructor(
+        private readonly context: vscode.ExtensionContext,
+        private readonly configManager: ConfigurationManager
     ) {
         // Create the notebook controller for HTTP requests
         this.controller = vscode.notebooks.createNotebookController(
@@ -87,12 +89,19 @@ export class NotebookController {
                     operationId: endpoint.operationId
                 }
             }
-        };
-
-        const uri = vscode.Uri.parse(`untitled:${endpoint.method.toUpperCase()}_${endpoint.path.replace(/[^a-zA-Z0-9]/g, '_')}.pfhttp`);
-        const notebook = await vscode.workspace.openNotebookDocument('pathfinder-http-notebook', notebookData);
+        };        const notebook = await vscode.workspace.openNotebookDocument('pathfinder-http-notebook', notebookData);
         
         return notebook;
+    }
+
+    /**
+     * Alias for createNotebookFromEndpoint to match test expectations
+     */
+    async createNotebookForEndpoint(
+        endpoint: EndpointInfo,
+        environment: SchemaEnvironment
+    ): Promise<vscode.NotebookDocument> {
+        return this.createNotebookFromEndpoint(endpoint, 'default', environment.id);
     }
 
     /**
@@ -215,7 +224,7 @@ export class NotebookController {
         // Add title cell
         cells.push(new vscode.NotebookCellData(
             vscode.NotebookCellKind.Markup,
-            `# ${endpoint.method.toUpperCase()} ${endpoint.path}\n\n${endpoint.description || 'No description available'}`,
+            `# ${endpoint.method.toUpperCase()} ${endpoint.path}\n\n${endpoint.description ?? 'No description available'}`,
             'markdown'
         ));
 
@@ -224,7 +233,7 @@ export class NotebookController {
         if (environments.length > 1) {
             cells.push(new vscode.NotebookCellData(
                 vscode.NotebookCellKind.Markup,
-                `## Environment\n\nCurrent: ${environmentId ? environments.find(e => e.id === environmentId)?.name || 'Unknown' : 'None selected'}`,
+                `## Environment\n\nCurrent: ${environmentId ? environments.find(e => e.id === environmentId)?.name ?? 'Unknown' : 'None selected'}`,
                 'markdown'
             ));
         }
@@ -297,5 +306,66 @@ export class NotebookController {
      */
     dispose(): void {
         this.controller.dispose();
+    }
+
+    /**
+     * Executes multiple cells as expected by tests
+     */
+    async executeCells(
+        cells: vscode.NotebookCell[],
+        execution: vscode.NotebookCellExecution,
+        context?: VariableContext
+    ): Promise<void> {
+        if (context) {
+            this.variableContext = { ...this.variableContext, ...context };
+        }
+
+        for (const cell of cells) {
+            await this.executeSingleCell(cell, cell.notebook);
+        }
+    }
+
+    /**
+     * Formats HTTP response for display
+     */
+    formatResponse(response: any): string {
+        if (typeof response === 'string') {
+            try {
+                const parsed = JSON.parse(response);
+                return JSON.stringify(parsed, null, 2);
+            } catch {
+                return response;
+            }
+        }
+        
+        if (typeof response === 'object' && response !== null) {
+            return JSON.stringify(response, null, 2);
+        }
+        
+        return String(response);
+    }
+
+    /**
+     * Extracts variables from HTTP response
+     */
+    extractVariables(response: any): VariableContext {
+        const variables: VariableContext = {};
+        
+        if (typeof response === 'object' && response !== null) {            // Extract common response fields as variables
+            if (response.id) {
+                variables.lastId = response.id;
+            }
+            if (response.token) {
+                variables.authToken = response.token;
+            }
+            if (response.access_token) {
+                variables.accessToken = response.access_token;
+            }
+            if (response.data) {
+                variables.lastData = response.data;
+            }
+        }
+        
+        return variables;
     }
 }

@@ -48,15 +48,17 @@ let notebookController: NotebookController;
  */
 export async function activate(context: vscode.ExtensionContext) {
     console.log('🚀 Pathfinder - OpenAPI Explorer is starting up!');
-    
-    // Initialize our core services
+      // Initialize our core services
     configManager = new ConfigurationManager(context);
     schemaLoader = new SchemaLoader();
     httpRunner = new HttpRequestRunner(configManager);
-    treeProvider = new ApiTreeProvider(configManager, schemaLoader);
-      // Initialize notebook functionality
+    
+    // Initialize notebook functionality
     notebookController = new NotebookController(context, configManager);
     const notebookProvider = new NotebookProvider();
+    
+    // Initialize tree provider with notebook controller
+    treeProvider = new ApiTreeProvider(configManager, schemaLoader, notebookController);
     
     // Register notebook provider
     const notebookProviderRegistration = vscode.workspace.registerNotebookSerializer(

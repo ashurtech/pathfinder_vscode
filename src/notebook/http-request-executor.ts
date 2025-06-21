@@ -5,9 +5,7 @@
  * including authentication, environment variable substitution, and response handling.
  */
 
-import * as vscode from 'vscode';
 import { ConfigurationManager } from '../configuration';
-import { ApiAuthentication } from '../types';
 
 /**
  * Represents a parsed HTTP request ready for execution
@@ -28,24 +26,27 @@ export interface HttpExecutionResult {
     statusText: string;
     headers: Record<string, string>;
     data: any;
+    body?: string;
+    success?: boolean;
+    contentType?: string;
+    parsedBody?: any;
     timing: {
         start: number;
         end: number;
         duration: number;
-    };
+    } | number; // Support both formats for backward compatibility
     error?: string;
 }
 
 export class HttpRequestExecutor {
-    constructor(private configManager: ConfigurationManager) {}
+    constructor(private readonly configManager?: ConfigurationManager) {}
 
     /**
      * Executes a parsed HTTP request
      */
     async executeRequest(request: ParsedHttpRequest): Promise<HttpExecutionResult> {
         const start = Date.now();
-        
-        try {
+          try {
             // Apply authentication
             const authenticatedRequest = await this.applyAuthentication(request);
             
@@ -53,17 +54,20 @@ export class HttpRequestExecutor {
             const response = await this.makeHttpRequest(authenticatedRequest);
             
             const end = Date.now();
+            const responseData = await this.parseResponseData(response);
+            const responseHeaders = this.extractHeaders(response);
+            const contentType = responseHeaders['content-type'] || '';
             
             return {
                 status: response.status,
                 statusText: response.statusText,
-                headers: this.extractHeaders(response),
-                data: await this.parseResponseData(response),
-                timing: {
-                    start,
-                    end,
-                    duration: end - start
-                }
+                headers: responseHeaders,
+                data: responseData,
+                body: typeof responseData === 'string' ? responseData : JSON.stringify(responseData),
+                success: response.status >= 200 && response.status < 300,
+                contentType,
+                parsedBody: contentType.includes('application/json') ? responseData : undefined,
+                timing: end - start // Support timing as number for compatibility
             };
         } catch (error) {
             const end = Date.now();
@@ -73,11 +77,9 @@ export class HttpRequestExecutor {
                 statusText: 'Error',
                 headers: {},
                 data: null,
-                timing: {
-                    start,
-                    end,
-                    duration: end - start
-                },
+                body: '',
+                success: false,
+                timing: end - start,
                 error: error instanceof Error ? error.message : String(error)
             };
         }

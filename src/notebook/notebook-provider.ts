@@ -56,7 +56,8 @@ export class NotebookProvider implements vscode.NotebookSerializer {
         
         // Extract metadata if present
         let metadata: Record<string, any> = {};
-        const metadataMatch = content.match(/<!--\s*metadata:\s*(\{.*?\})\s*-->/s);
+        const metadataRegex = /<!--\s*metadata:\s*(\{.*?\})\s*-->/s;
+        const metadataMatch = metadataRegex.exec(content);
         if (metadataMatch) {
             try {
                 metadata = JSON.parse(metadataMatch[1]);
@@ -119,7 +120,7 @@ export class NotebookProvider implements vscode.NotebookSerializer {
         // Serialize each cell
         for (const cell of data.cells) {
             const language = cell.languageId;
-            const id = cell.metadata?.id || this.generateCellId();
+            const id = cell.metadata?.id ?? this.generateCellId();
             
             xml += `<VSCode.Cell id="${id}" language="${language}">\n`;
             xml += this.escapeCellContent(cell.value);
@@ -142,7 +143,7 @@ export class NotebookProvider implements vscode.NotebookSerializer {
      * Generates a unique cell ID
      */
     private generateCellId(): string {
-        return Math.random().toString(36).substr(2, 8);
+        return Math.random().toString(36).substring(2, 10);
     }
 
     /**
@@ -161,10 +162,9 @@ export class NotebookProvider implements vscode.NotebookSerializer {
             const cellRegex = /<VSCode\.Cell(?:\s+id="([^"]*)")?(?:\s+language="([^"]*)")?\s*>(.*?)<\/VSCode\.Cell>/gs;
             let match;
             let cellCount = 0;
-            
-            while ((match = cellRegex.exec(content)) !== null) {
+              while ((match = cellRegex.exec(content)) !== null) {
                 cellCount++;
-                const [, id, language] = match;
+                const [, , language] = match;
                 
                 if (language && !this.isValidLanguage(language)) {
                     errors.push(`Invalid language "${language}" in cell ${cellCount}`);
@@ -202,7 +202,7 @@ export class NotebookProvider implements vscode.NotebookSerializer {
         const cells: vscode.NotebookCellData[] = [];
         
         for (const section of sections) {
-            const language = this.detectLanguage(section) || defaultLanguage;
+            const language = this.detectLanguage(section) ?? defaultLanguage;
             const cellKind = language === 'markdown' ? 
                 vscode.NotebookCellKind.Markup : 
                 vscode.NotebookCellKind.Code;
@@ -211,6 +211,36 @@ export class NotebookProvider implements vscode.NotebookSerializer {
         }
         
         return new vscode.NotebookData(cells);
+    }
+
+    /**
+     * Converts HTTP file content to notebook format (alias for convertTextToNotebook)
+     */
+    convertHttpFileToNotebook(content: string): vscode.NotebookData {
+        return this.convertTextToNotebook(content, 'http');
+    }
+
+    /**
+     * Exports notebook data to HTTP file format
+     */
+    exportToHttpFile(notebookData: vscode.NotebookData): string {
+        const httpSections: string[] = [];
+        
+        for (const cell of notebookData.cells) {
+            if (cell.languageId === 'http') {
+                httpSections.push(cell.value);
+            } else if (cell.languageId === 'markdown') {
+                // Convert markdown to comments
+                const commentedMarkdown = cell.value
+                    .split('\n')
+                    .map(line => line.trim() ? `# ${line}` : '#')
+                    .join('\n');
+                httpSections.push(commentedMarkdown);
+            }
+            // Skip other languages like JSON for HTTP file export
+        }
+        
+        return httpSections.join('\n\n###\n\n');
     }
 
     /**
