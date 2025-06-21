@@ -624,15 +624,14 @@ export class HttpRequestRunner {
                 headers.push(`${headerName}: ${headerValue}`);
             }
         }
-        
-        // Add authentication headers based on environment (with security masking)
-        if (environment.auth.type === 'bearer' && environment.auth.bearerToken) {
+          // Add authentication headers based on environment (with security masking)
+        if (environment.auth?.type === 'bearer' && environment.auth.bearerToken) {
             const maskedToken = this.maskSensitiveValue(environment.auth.bearerToken);
             headers.push(`Authorization: Bearer ${maskedToken} # 👁️ Click to toggle visibility`);
-        } else if (environment.auth.type === 'apikey' && environment.auth.apiKey) {
+        } else if (environment.auth?.type === 'apikey' && environment.auth.apiKey) {
             const maskedKey = this.maskSensitiveValue(environment.auth.apiKey);
             headers.push(`X-API-Key: ${maskedKey} # 👁️ Click to toggle visibility`);
-        } else if (environment.auth.type === 'basic' && environment.auth.username && environment.auth.password) {
+        } else if (environment.auth?.type === 'basic' && environment.auth.username && environment.auth.password) {
             const credentials = Buffer.from(`${environment.auth.username}:${environment.auth.password}`).toString('base64');
             const maskedCredentials = this.maskSensitiveValue(credentials);
             headers.push(`Authorization: Basic ${maskedCredentials} # 👁️ Click to toggle visibility`);
@@ -942,25 +941,41 @@ ${formattedBody}
     }    /**
      * Open HTTP request editor
      */
-    async openRequestEditor(endpoint: EndpointInfo, environment: ApiEnvironment, platformConfig?: any): Promise<void> {
+    async openRequestEditor(endpoint: EndpointInfo, environment: any, platformConfig?: any): Promise<void> {
         try {
             const skeleton = this.generateRequestSkeleton(endpoint, environment, platformConfig);
-            
-            // Create new untitled document
+              // Create new untitled document
             const document = await vscode.workspace.openTextDocument({
                 content: skeleton,
                 language: 'http'
             });
-
+            
             // Store credentials securely for this document
             const credentials: Record<string, string> = {};
-            if (environment.auth.type === 'bearer' && environment.auth.bearerToken) {
-                credentials['Authorization'] = `Bearer ${environment.auth.bearerToken}`;
-            } else if (environment.auth.type === 'apikey' && environment.auth.apiKey) {
-                credentials['X-API-Key'] = environment.auth.apiKey;
-            } else if (environment.auth.type === 'basic' && environment.auth.username && environment.auth.password) {
-                const basicCredentials = Buffer.from(`${environment.auth.username}:${environment.auth.password}`).toString('base64');
-                credentials['Authorization'] = `Basic ${basicCredentials}`;
+            
+            // For schema-first environments, get credentials from secrets storage
+            if (environment.authSecretKey && environment.auth) {
+                try {
+                    const storedCredentials = await this.configManager.getCredentials(environment);
+                    if (storedCredentials) {
+                        if (environment.auth.type === 'bearer' && storedCredentials.apiKey) {
+                            credentials['Authorization'] = `Bearer ${storedCredentials.apiKey}`;
+                        } else if (environment.auth.type === 'apikey' && storedCredentials.apiKey) {
+                            const headerName = environment.auth.apiKeyName ?? 'X-API-Key';
+                            credentials[headerName] = storedCredentials.apiKey;
+                        } else if (environment.auth.type === 'basic' && storedCredentials.username && storedCredentials.password) {
+                            const basicCredentials = Buffer.from(`${storedCredentials.username}:${storedCredentials.password}`).toString('base64');
+                            credentials['Authorization'] = `Basic ${basicCredentials}`;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error retrieving credentials from secrets storage:', error);
+                    // Fall back to legacy auth structure if secrets retrieval fails
+                    this.handleLegacyAuth(environment, credentials);
+                }
+            } else if (environment.auth) {
+                // Handle legacy auth structure for backward compatibility
+                this.handleLegacyAuth(environment, credentials);
             }
             
             if (Object.keys(credentials).length > 0) {
@@ -980,9 +995,25 @@ ${formattedBody}
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             vscode.window.showErrorMessage(`Failed to open request editor: ${errorMessage}`);
-            this.outputChannel.appendLine(`Error opening request editor: ${errorMessage}`);
+            this.outputChannel.appendLine(`Error opening request editor: ${errorMessage}`);        }
+    }
+
+    /**
+     * Handle legacy auth structure for backward compatibility
+     */
+    private handleLegacyAuth(environment: any, credentials: Record<string, string>): void {
+        if (environment.auth?.type === 'bearer' && environment.auth?.bearerToken) {
+            credentials['Authorization'] = `Bearer ${environment.auth.bearerToken}`;
+        } else if (environment.auth?.type === 'apikey' && environment.auth?.apiKey) {
+            const headerName = environment.auth?.apiKeyName ?? 'X-API-Key';
+            credentials[headerName] = environment.auth.apiKey;
+        } else if (environment.auth?.type === 'basic' && environment.auth?.username && environment.auth?.password) {
+            const basicCredentials = Buffer.from(`${environment.auth.username}:${environment.auth.password}`).toString('base64');
+            credentials['Authorization'] = `Basic ${basicCredentials}`;
         }
-    }    /**
+    }
+
+    /**
      * Display response in webview
      */
     async displayResponse(response: HttpResponse, originalRequest: HttpRequest): Promise<void> {
@@ -1089,11 +1120,9 @@ ${formattedBody}
 export function activate(context: vscode.ExtensionContext) {
     const configManager = new ConfigurationManager(context);
     const httpRunner = new HttpRequestRunner(configManager);
-    const responseViewer = httpRunner.getResponseViewer();
-
-    // Register request history view
+    const responseViewer = httpRunner.getResponseViewer();    // Register request history view
     const requestHistoryProvider = httpRunner.getRequestHistoryProvider();
-    const requestHistoryView = vscode.window.createTreeView('pathfinderRequestHistory', {
+    vscode.window.createTreeView('pathfinderRequestHistory', {
         treeDataProvider: requestHistoryProvider,
         showCollapseAll: true
     });
