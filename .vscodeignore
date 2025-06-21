@@ -7,6 +7,7 @@ docs/**
 tests/**
 jstests/**
 notes/**
+coverage/**
 .gitignore
 .yarnrc
 esbuild.js
