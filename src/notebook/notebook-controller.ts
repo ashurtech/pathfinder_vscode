@@ -446,8 +446,23 @@ export class NotebookController {
         let fallbackTemplate = '{\n  "baseUrl": "{{baseUrl}}"';
         if (environmentId) {
             const environment = await this.configManager.getSchemaEnvironment(environmentId);
-            if (environment?.auth) {
-                switch (environment.auth.type) {
+            if (environment) {
+                const credentials = await this.configManager.getCredentials(environment);
+                
+                // Determine auth type from environment config or infer from credentials
+                let authType = environment.auth?.type;
+                const authTypeString = authType as string;
+                if (!authType || authTypeString === 'inherit') {
+                    if (credentials) {
+                        if (credentials.username && credentials.password) {
+                            authType = 'basic';
+                        } else if (credentials.apiKey) {
+                            authType = 'apikey';
+                        }
+                    }
+                }
+                
+                switch (authType) {
                     case 'basic':
                         fallbackTemplate += ',\n  "username": "{{username}}",\n  "password": "{{password}}"';
                         break;
@@ -589,8 +604,29 @@ export class NotebookController {
         // Add authentication header based on environment configuration
         if (environmentId) {
             const environment = await this.configManager.getSchemaEnvironment(environmentId);
-            if (environment?.auth) {
-                switch (environment.auth.type) {
+            
+            if (environment) {
+                // Get the actual credentials to determine auth type
+                const credentials = await this.configManager.getCredentials(environment);
+                
+                // Determine auth type from environment config or infer from credentials
+                let authType = environment.auth?.type;
+                
+                // Handle 'inherit' auth type or missing auth type by inferring from credentials
+                // Cast to string to handle 'inherit' which isn't in the TypeScript type definition
+                const authTypeString = authType as string;
+                if (!authType || authTypeString === 'inherit') {
+                    if (credentials) {
+                        if (credentials.username && credentials.password) {
+                            authType = 'basic';
+                        } else if (credentials.apiKey) {
+                            authType = 'apikey';
+                        }
+                    }
+                }
+                
+                // Generate appropriate auth header
+                switch (authType) {
                     case 'basic':
                         request += 'Authorization: Basic {{username}}:{{password}}\n';
                         break;
@@ -598,13 +634,15 @@ export class NotebookController {
                         request += 'Authorization: Bearer {{bearerToken}}\n';
                         break;
                     case 'apikey':
-                        if (environment.auth.apiKeyLocation === 'header') {
+                        if (environment.auth?.apiKeyLocation === 'header') {
                             const headerName = environment.auth.apiKeyName ?? 'X-API-Key';
                             request += `${headerName}: {{apiKey}}\n`;
+                        } else {
+                            // Default to X-API-Key if no specific location configured
+                            request += 'X-API-Key: {{apiKey}}\n';
                         }
-                        // For query parameter API keys, they'll be added to the URL later
                         break;
-                    // 'none' type doesn't add any auth headers
+                    // 'none' type and unhandled types don't add any auth headers
                 }
             }
         }

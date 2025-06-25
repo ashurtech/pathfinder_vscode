@@ -54,6 +54,18 @@ const mockEnvironments = {
             apiKeyLocation: 'header',
             apiKeyName: 'X-API-Key'
         }
+    },
+    // Test case for your scenario - no explicit auth.type but has credentials
+    inferredBasicAuth: {
+        id: 'env-inferred',
+        schemaId: 'test-schema',
+        name: 'Inferred Basic Auth Environment',
+        baseUrl: 'https://r.prod-1.es.wtg.ws',
+        auth: {
+            // No explicit type, but has username/password like your environment
+            username: 'zac',
+            password: '*****m'
+        }
     }
 };
 
@@ -61,6 +73,25 @@ const mockEnvironments = {
 const mockConfigManager = {
     async getSchemaEnvironment(environmentId) {
         return mockEnvironments[environmentId];
+    },
+    async getCredentials(environment) {
+        // Simulate what the real getCredentials would return based on auth type
+        switch (environment.auth?.type) {
+            case 'basic':
+                return { username: environment.auth.username, password: environment.auth.password };
+            case 'bearer':
+                return { bearerToken: environment.auth.bearerToken };
+            case 'apikey':
+                return { apiKey: environment.auth.apiKey };
+            default:
+                // For environments without explicit auth.type, infer from available fields
+                if (environment.auth?.username && environment.auth?.password) {
+                    return { username: environment.auth.username, password: environment.auth.password };
+                } else if (environment.auth?.apiKey) {
+                    return { apiKey: environment.auth.apiKey };
+                }
+                return undefined;
+        }
     }
 };
 
@@ -74,8 +105,24 @@ async function generateHttpRequest(endpoint, environmentId, configManager) {
     // Add authentication header based on environment configuration
     if (environmentId) {
         const environment = await configManager.getSchemaEnvironment(environmentId);
-        if (environment?.auth) {
-            switch (environment.auth.type) {
+        if (environment) {
+            // Get the actual credentials to determine auth type
+            const credentials = await configManager.getCredentials(environment);
+            
+            // Determine auth type from environment config or infer from credentials
+            let authType = environment.auth?.type;
+            
+            // If no explicit auth type, infer from available credentials
+            if (!authType && credentials) {
+                if (credentials.username && credentials.password) {
+                    authType = 'basic';
+                } else if (credentials.apiKey) {
+                    authType = 'apikey';
+                }
+            }
+            
+            // Generate appropriate auth header
+            switch (authType) {
                 case 'basic':
                     request += 'Authorization: Basic {{username}}:{{password}}\n';
                     break;
@@ -83,11 +130,15 @@ async function generateHttpRequest(endpoint, environmentId, configManager) {
                     request += 'Authorization: Bearer {{bearerToken}}\n';
                     break;
                 case 'apikey':
-                    if (environment.auth.apiKeyLocation === 'header') {
+                    if (environment.auth?.apiKeyLocation === 'header') {
                         const headerName = environment.auth.apiKeyName ?? 'X-API-Key';
                         request += `${headerName}: {{apiKey}}\n`;
+                    } else {
+                        // Default to X-API-Key if no specific location configured
+                        request += 'X-API-Key: {{apiKey}}\n';
                     }
                     break;
+                // 'none' type doesn't add any auth headers
             }
         }
     }
@@ -139,8 +190,17 @@ async function runTests() {
         'Should use API key header format');
     console.log('✅ API key test passed\n');
 
-    // Test 4: No environment (should have no auth header)
-    console.log('Test 4: No Environment');
+    // Test 4: Inferred Basic Authentication (like your case)
+    console.log('Test 4: Inferred Basic Authentication (your scenario)');
+    const inferredRequest = await generateHttpRequest(testEndpoint, 'inferredBasicAuth', mockConfigManager);
+    console.log('Generated request:');
+    console.log(inferredRequest);
+    assert(inferredRequest.includes('Authorization: Basic {{username}}:{{password}}'), 
+        'Should infer and use basic auth format when username/password are present');
+    console.log('✅ Inferred basic auth test passed\n');
+
+    // Test 5: No environment (should have no auth header)
+    console.log('Test 5: No Environment');
     const noAuthRequest = await generateHttpRequest(testEndpoint, null, mockConfigManager);
     console.log('Generated request:');
     console.log(noAuthRequest);
@@ -148,13 +208,18 @@ async function runTests() {
         'Should have no auth headers when no environment');
     console.log('✅ No environment test passed\n');
 
-    console.log('🎉 All tests passed! The authentication generation fix is working correctly.');
+    console.log('🎉 All tests passed! The enhanced authentication generation fix is working correctly.');
     console.log('\n📝 Summary:');
-    console.log('- Basic auth now generates: Authorization: Basic {{username}}:{{password}}');
-    console.log('- Bearer token now generates: Authorization: Bearer {{bearerToken}}');  
-    console.log('- API key now generates: X-API-Key: {{apiKey}} (or custom header name)');
-    console.log('- No environment now generates: no auth headers');
-    console.log('\nThis fixes the original issue where all requests used "Authorization: Bearer {{apiKey}}" regardless of the actual auth type.');
+    console.log('- Basic auth (explicit) generates: Authorization: Basic {{username}}:{{password}}');
+    console.log('- Bearer token generates: Authorization: Bearer {{bearerToken}}');  
+    console.log('- API key generates: X-API-Key: {{apiKey}} (or custom header name)');
+    console.log('- Basic auth (inferred) generates: Authorization: Basic {{username}}:{{password}}');
+    console.log('- No environment generates: no auth headers');
+    console.log('\n🔧 Key Enhancement:');
+    console.log('- Now automatically detects auth type from available credentials');
+    console.log('- If environment has username/password but no explicit auth.type, it infers "basic"');
+    console.log('- If environment has apiKey but no explicit auth.type, it infers "apikey"');
+    console.log('\nThis should fix your issue where username/password environments were not generating auth headers!');
 }
 
 // Run the tests
