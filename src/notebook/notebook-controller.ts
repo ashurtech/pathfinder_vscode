@@ -441,12 +441,35 @@ export class NotebookController {
         }        // Add variables cell with current context values (masked for security)
         const maskedContext = this.maskSensitiveVariables(this.variableContext);
         const variablesJson = JSON.stringify(maskedContext, null, 2);
+        
+        // Generate fallback template based on environment auth type
+        let fallbackTemplate = '{\n  "baseUrl": "{{baseUrl}}"';
+        if (environmentId) {
+            const environment = await this.configManager.getSchemaEnvironment(environmentId);
+            if (environment?.auth) {
+                switch (environment.auth.type) {
+                    case 'basic':
+                        fallbackTemplate += ',\n  "username": "{{username}}",\n  "password": "{{password}}"';
+                        break;
+                    case 'bearer':
+                        fallbackTemplate += ',\n  "bearerToken": "{{bearerToken}}"';
+                        break;
+                    case 'apikey':
+                        fallbackTemplate += ',\n  "apiKey": "{{apiKey}}"';
+                        break;
+                }
+            }
+        } else {
+            fallbackTemplate += ',\n  "apiKey": "{{apiKey}}"';
+        }
+        fallbackTemplate += '\n}';
+        
         cells.push(new vscode.NotebookCellData(
             vscode.NotebookCellKind.Code,
-            variablesJson || '{\n  "baseUrl": "{{baseUrl}}",\n  "apiKey": "{{apiKey}}"\n}',
+            variablesJson || fallbackTemplate,
             'json'
-        ));// Add HTTP request cell
-        const httpRequest = this.generateHttpRequest(endpoint, environmentId);
+        ));        // Add HTTP request cell
+        const httpRequest = await this.generateHttpRequest(endpoint, environmentId);
         cells.push(new vscode.NotebookCellData(
             vscode.NotebookCellKind.Code,
             httpRequest,
@@ -557,15 +580,33 @@ export class NotebookController {
     /**
      * Generates an HTTP request template for the endpoint
      */
-    private generateHttpRequest(endpoint: EndpointInfo, environmentId?: string): string {
+    private async generateHttpRequest(endpoint: EndpointInfo, environmentId?: string): Promise<string> {
         let request = `${endpoint.method.toUpperCase()} {{baseUrl}}${endpoint.path}\n`;
         
         // Add common headers
         request += 'Content-Type: application/json\n';
         
-        // Add authentication header if needed
+        // Add authentication header based on environment configuration
         if (environmentId) {
-            request += 'Authorization: Bearer {{apiKey}}\n';
+            const environment = await this.configManager.getSchemaEnvironment(environmentId);
+            if (environment?.auth) {
+                switch (environment.auth.type) {
+                    case 'basic':
+                        request += 'Authorization: Basic {{username}}:{{password}}\n';
+                        break;
+                    case 'bearer':
+                        request += 'Authorization: Bearer {{bearerToken}}\n';
+                        break;
+                    case 'apikey':
+                        if (environment.auth.apiKeyLocation === 'header') {
+                            const headerName = environment.auth.apiKeyName ?? 'X-API-Key';
+                            request += `${headerName}: {{apiKey}}\n`;
+                        }
+                        // For query parameter API keys, they'll be added to the URL later
+                        break;
+                    // 'none' type doesn't add any auth headers
+                }
+            }
         }
         
         request += '\n';
