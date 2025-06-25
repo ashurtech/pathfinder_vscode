@@ -9,10 +9,11 @@
 
 import * as vscode from 'vscode';
 let yaml: any;
-try { yaml = require('yaml'); } catch {}
-import { ConfigurationManager } from './configuration';
-import { SchemaLoader } from './schema-loader';
-import { ApiTreeProvider } from './tree-provider';
+try { yaml = require('yaml'); } catch {}    import { ConfigurationManager } from './configuration';
+    import { SchemaLoader } from './schema-loader';
+    import { ApiTreeProvider } from './tree-provider';
+    import { ResponseHandler } from './response-handler';
+    import { CodeGenerationCommands } from './code-generation';
 import { HttpRequestRunner } from './http-runner';
 import { HttpCodeLensProvider } from './http-codelens';
 import { NotebookController, NotebookProvider } from './notebook';
@@ -20,7 +21,6 @@ import {
     showEnvironmentDetailsCommand, 
     showSchemaDetailsCommand, 
     showEndpointDetailsCommand, 
-    generateCodeForEndpointCommand, 
     testEndpointCommand,
     showLoadSchemaOptionsCommand,
     duplicateEnvironmentCommand
@@ -30,9 +30,7 @@ import { AddEnvironmentWebview } from './webviews/add-environment-form';
 import { AddEnvironmentGroupWebview } from './webviews/add-environment-group-form';
 import { EditEnvironmentGroupWebview } from './webviews/edit-environment-group-form';
 import { AddEnvironmentToGroupWebview } from './webviews/add-environment-to-group-form';
-import { EditEnvironmentWebview } from './webviews/edit-environment-form';
-import { SchemaManagementWebview } from './schema-management-webview';
-import { ApiEnvironment, EndpointInfo, SchemaEnvironment, SchemaEnvironmentGroup } from './types';
+import { EndpointInfo, SchemaEnvironment } from './types';
 
 // Global instances that will be used throughout the extension
 let configManager: ConfigurationManager;
@@ -230,7 +228,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     const showLoadSchemaOptionsCmd = vscode.commands.registerCommand(
         'pathfinder.showLoadSchemaOptions',
-        (environment: ApiEnvironment) => showLoadSchemaOptionsCommand(environment)
+        (environment: SchemaEnvironment) => showLoadSchemaOptionsCommand(environment)
     );
       const editEnvironmentCmd = vscode.commands.registerCommand(
         'pathfinder.editEnvironment',
@@ -239,7 +237,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     const duplicateEnvironmentCmd = vscode.commands.registerCommand(
         'pathfinder.duplicateEnvironment', 
-        (environment: ApiEnvironment) => duplicateEnvironmentCommand(environment, configManager)
+        (environment: SchemaEnvironment) => duplicateEnvironmentCommand(environment, configManager)
     );
     
     // ========================
@@ -272,12 +270,12 @@ function registerCommands(context: vscode.ExtensionContext) {
     
     const loadSchemaFromUrlCommand = vscode.commands.registerCommand(
         'pathfinder.loadSchemaFromUrl', 
-        (environment?: ApiEnvironment) => loadSchemaFromUrlHandler(environment)
+        (environment?: SchemaEnvironment) => loadSchemaFromUrlHandler(environment)
     );
     
     const loadSchemaFromFileCommand = vscode.commands.registerCommand(
         'pathfinder.loadSchemaFromFile', 
-        (environment?: ApiEnvironment) => loadSchemaFromFileHandler(environment)
+        (environment?: SchemaEnvironment) => loadSchemaFromFileHandler(environment)
     );
     
     const showSchemaInfoCommand = vscode.commands.registerCommand(
@@ -691,40 +689,47 @@ function registerTreeCommands(context: vscode.ExtensionContext) {
     const showEndpointDetailsCmd = vscode.commands.registerCommand(
         'pathfinder.showEndpointDetails',
         showEndpointDetailsCommand
+    );    // Initialize code generation commands
+    const codeGenCommands = new CodeGenerationCommands(configManager);
+      // Register command for opening full responses
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            'pathfinder.openFullResponse',
+            (content: string) => ResponseHandler.openFullResponseInEditor(content)
+        )
     );
     
     const generateCodeCmd = vscode.commands.registerCommand(
         'pathfinder.generateCodeForEndpoint',
-        generateCodeForEndpointCommand
+        (treeItem: any) => codeGenCommands.generateCurl(treeItem)
     );
     
     // ========================
     // Code Generation Commands
     // ========================
-    
-    const generateCurlCmd = vscode.commands.registerCommand(
+      const generateCurlCmd = vscode.commands.registerCommand(
         'pathfinder.generateCurl',
-        (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'curl')
+        (treeItemOrEndpoint: any, schemaItemWithEnv?: any) => codeGenCommands.generateCurl(treeItemOrEndpoint, schemaItemWithEnv)
     );
     
     const generateAnsibleCmd = vscode.commands.registerCommand(
         'pathfinder.generateAnsible',
-        (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'ansible')
+        (treeItemOrEndpoint: any, schemaItemWithEnv?: any) => codeGenCommands.generateCurl(treeItemOrEndpoint, schemaItemWithEnv) // Fallback to curl for now
     );
     
     const generatePowerShellCmd = vscode.commands.registerCommand(
         'pathfinder.generatePowerShell',
-        (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'powershell')
+        (treeItemOrEndpoint: any, schemaItemWithEnv?: any) => codeGenCommands.generateCurl(treeItemOrEndpoint, schemaItemWithEnv) // Fallback to curl for now
     );
     
     const generatePythonCmd = vscode.commands.registerCommand(
         'pathfinder.generatePython',
-        (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'python')
+        (treeItemOrEndpoint: any, schemaItemWithEnv?: any) => codeGenCommands.generatePython(treeItemOrEndpoint, schemaItemWithEnv)
     );
     
     const generateJavaScriptCmd = vscode.commands.registerCommand(
         'pathfinder.generateJavaScript',
-        (endpoint: any, schemaItem: any) => generateCodeForEndpointCommand(endpoint, schemaItem, 'javascript')
+        (treeItemOrEndpoint: any, schemaItemWithEnv?: any) => codeGenCommands.generateJavaScript(treeItemOrEndpoint, schemaItemWithEnv)
     );
       const testEndpointCmd = vscode.commands.registerCommand(
         'pathfinder.testEndpoint',
@@ -870,16 +875,16 @@ async function listApiEnvironmentsHandler() {
 /**
  * Command to load a schema from a URL
  */
-async function loadSchemaFromUrlHandler(environment?: ApiEnvironment) {
+async function loadSchemaFromUrlHandler(environment?: SchemaEnvironment) {
     try {
-        let selectedEnv: ApiEnvironment;
+        let selectedEnv: SchemaEnvironment;
         
         if (environment) {
             // Environment already provided (from tree view)
             selectedEnv = environment;
         } else {
             // Need to select environment (from command palette)
-            const environments = await configManager.getApiEnvironments();
+            const environments = await configManager.getSchemaEnvironments();
             
             if (environments.length === 0) {
                 vscode.window.showWarningMessage('No API environments configured. Please add an environment first.');
@@ -976,16 +981,15 @@ async function loadSchemaFromUrlHandler(environment?: ApiEnvironment) {
 /**
  * Command to load a schema from a file
  */
-async function loadSchemaFromFileHandler(environment?: ApiEnvironment) {
+async function loadSchemaFromFileHandler(environment?: SchemaEnvironment) {
     try {
-        let selectedEnv: ApiEnvironment;
-        
-        if (environment) {
+        let selectedEnv: SchemaEnvironment;
+          if (environment) {
             // Environment already provided (from tree view)
             selectedEnv = environment;
         } else {
             // Need to select environment (from command palette)
-            const environments = await configManager.getApiEnvironments();
+            const environments = await configManager.getSchemaEnvironments();
             
             if (environments.length === 0) {
                 vscode.window.showWarningMessage('No API environments configured. Please add an environment first.');

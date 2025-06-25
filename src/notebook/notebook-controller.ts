@@ -16,6 +16,7 @@ import { HttpRequestParser } from './http-request-parser';
 import { NotebookRequestHistoryProvider } from './notebook-request-history';
 import { GroupExecutor, RequestTemplate, GroupExecutionResult } from './group-executor';
 import { EnvironmentSelectorWebview } from '../webviews/environment-selector';
+import { ResponseHandler } from '../response-handler';
 
 /**
  * Represents the structure of a notebook cell in our XML format
@@ -355,33 +356,20 @@ export class NotebookController {
                     `📥 RESPONSE\n${'='.repeat(50)}\n${responseDetails}`,
                     'text/plain'
                 )
-            ])
-        ];        // Add JSON output only if response is reasonably sized
-        const responseBodySize = result.body ? result.body.length : 0;
-        // Increased limit for better API exploration - users want to see full responses
-        const MAX_JSON_OUTPUT_SIZE = 100000; // 100KB limit - much more generous for API responses
+            ])        ];
 
-        if (responseBodySize > 0 && responseBodySize <= MAX_JSON_OUTPUT_SIZE) {
-            // JSON response data (for easy variable extraction) - now supports larger responses
-            outputs.push(new vscode.NotebookCellOutput([
-                vscode.NotebookCellOutputItem.json(result, 'application/json')
-            ]));
-        }else if (responseBodySize > MAX_JSON_OUTPUT_SIZE && result.body) {
-            // For large responses, provide a text summary instead
-            const sizeMB = (responseBodySize / 1024 / 1024).toFixed(2);
-            const preview = result.body.substring(0, 1000);
-            const isPreview = result.body.length > 1000;
-            
-            outputs.push(new vscode.NotebookCellOutput([
-                vscode.NotebookCellOutputItem.text(
-                    `⚠️  LARGE RESPONSE (${sizeMB}MB)\n${'='.repeat(50)}\n` +
-                    `Response is too large to display as interactive JSON.\n` +
-                    `Size: ${responseBodySize.toLocaleString()} bytes\n` +
-                    `See response details above for formatted content.\n\n` +
-                    `Preview (first 1000 characters):\n${preview}${isPreview ? '...' : ''}`,
-                    'text/plain'
-                )
-            ]));
+        // Use ResponseHandler for smart response handling
+        try {
+            const responseOutput = await ResponseHandler.handleApiResponse(result.body, cell.document.uri);
+            outputs.push(responseOutput);
+        } catch (error) {
+            console.error('Failed to handle API response:', error);
+            // Fallback to simple JSON output
+            if (result.body) {
+                outputs.push(new vscode.NotebookCellOutput([
+                    vscode.NotebookCellOutputItem.json(result, 'application/json')
+                ]));
+            }
         }
 
         execution.replaceOutput(outputs);

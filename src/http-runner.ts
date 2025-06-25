@@ -844,13 +844,33 @@ ${pathParams.map(p => `# ${p}: <value>`).join('\n') || '# No path parameters'}
         
         // Add authentication headers from environment config and credentials
         if (config.resolvedAuth) {
-            if (config.resolvedAuth.type === 'bearer' && credentials?.apiKey) {
-                headers['Authorization'] = `Bearer ${credentials.apiKey}`;
-            } else if (config.resolvedAuth.type === 'apikey' && credentials?.apiKey) {
-                headers['X-API-Key'] = credentials.apiKey;
-            } else if (config.resolvedAuth.type === 'basic' && credentials?.username && credentials?.password) {
-                const authString = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
-                headers['Authorization'] = `Basic ${authString}`;
+            // Use explicit type checking to prevent conflicts between auth types
+            switch (config.resolvedAuth.type) {
+                case 'bearer':
+                    if (credentials?.apiKey) {
+                        headers['Authorization'] = `Bearer ${credentials.apiKey}`;
+                    }
+                    break;
+                
+                case 'apikey':
+                    if (credentials?.apiKey) {
+                        const keyName = config.resolvedAuth.apiKeyName ?? 'X-API-Key';
+                        if (config.resolvedAuth.apiKeyLocation === 'query') {
+                            // API key goes in query parameter, not header
+                            // This will be handled in URL construction
+                        } else {
+                            // API key goes in header (default)
+                            headers[keyName] = credentials.apiKey;
+                        }
+                    }
+                    break;
+                
+                case 'basic':
+                    if (credentials?.username && credentials?.password) {
+                        const authString = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
+                        headers['Authorization'] = `Basic ${authString}`;
+                    }
+                    break;
             }
         }
 

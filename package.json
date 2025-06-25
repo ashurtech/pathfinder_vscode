@@ -1,7 +1,8 @@
 {
   "name": "pathfinder-openapi-explorer",
   "displayName": "Pathfinder - OpenAPI Explorer",
-  "description": "Explore, test, and generate code for OpenAPI/REST APIs with intelligent platform detection",  "version": "0.3.7",
+  "description": "Explore, test, and generate code for OpenAPI/REST APIs with intelligent platform detection",
+  "version": "0.3.7",
   "publisher": "ASHURTECHNET",
   "license": "MIT",
   "icon": "pathfinder.png",
@@ -202,7 +203,8 @@
       {
         "command": "pathfinder.addEnvironmentToGroup",
         "title": "Add Environment to Group",
-        "category": "Pathfinder"      },
+        "category": "Pathfinder"
+      },
       {
         "command": "pathfinder.toggleAuthVisibility",
         "title": "Toggle Authorization Visibility",
@@ -230,7 +232,8 @@
         "command": "pathfinder.factoryReset",
         "title": "Factory Reset (Remove All User Data)",
         "category": "Pathfinder"
-      },      {
+      },
+      {
         "command": "pathfinder.clearRequestHistory",
         "title": "Clear Request History"
       },
@@ -247,7 +250,8 @@
         "title": "Run in Request Notebook",
         "icon": "$(notebook)",
         "category": "Pathfinder"
-      },      {
+      },
+      {
         "command": "pathfinder.fixNotebookCellLanguages",
         "title": "Fix Notebook Cell Languages",
         "icon": "$(tools)",
@@ -321,7 +325,9 @@
             "filenamePattern": "*.pfhttp"
           }
         ]
-      }    ],    "views": {
+      }
+    ],
+    "views": {
       "pathfinder-sidebar-view": [
         {
           "id": "pathfinderExplorer",
@@ -368,7 +374,8 @@
           "command": "pathfinder.importConfiguration",
           "when": "view == pathfinderExplorer",
           "group": "navigation@4"
-        },        {
+        },
+        {
           "command": "pathfinder.clearRequestHistory",
           "when": "view == pathfinderRequestHistory",
           "group": "navigation"
@@ -473,12 +480,15 @@
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit",
-    "lint": "eslint src",
-    "test": "npm run test:unit && npm run test:vscode",
+    "lint": "eslint src",    "test": "npm run test:unit && npm run test:vscode",
     "test:unit": "jest",
     "test:unit:watch": "jest --watch",
     "test:unit:coverage": "jest --coverage",
     "test:unit:ci": "jest --ci --coverage --watchAll=false",
+    "test:integration": "jest test/integration --testTimeout=10000",
+    "test:integration:watch": "jest test/integration --watch",
+    "test:all": "npm run test:unit && npm run test:integration && npm run test:vscode",
+    "test:e2e": "npm run compile && vscode-test --extensionDevelopmentPath=. --extensionTestsPath=./out/test/integration",
     "test:vscode": "vscode-test"
   },
   "devDependencies": {
@@ -503,7 +513,7 @@
   "dependencies": {
     "axios": "^1.7.9",
     "openapi-types": "^12.1.3",
-    "simple-icons": "^15.2.0",
+    "simple-icons": "^15.3.0",
     "swagger-parser": "^10.0.3"
   }
 }

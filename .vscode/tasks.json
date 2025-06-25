@@ -59,6 +59,58 @@
 				"npm: watch-tests"
 			],
 			"problemMatcher": []
-		}
+		},
+        {
+            "label": "Run Integration Tests",
+            "type": "npm",
+            "script": "test:integration",
+            "group": "test",
+            "isBackground": false,
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": false
+            },
+            "problemMatcher": ["$tsc"]
+        },
+        {
+            "label": "Run All Tests (Unit + Integration)",
+            "type": "shell",
+            "command": "npm",
+            "args": ["run", "test:all"],
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "dependsOrder": "sequence",
+            "dependsOn": ["npm: compile", "npm: test", "Run Integration Tests"],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": true,
+                "clear": true
+            },
+            "problemMatcher": ["$tsc"]
+        },
+        {
+            "label": "Test Extension End-to-End",
+            "type": "shell",
+            "command": "npm",
+            "args": ["run", "test:e2e"],
+            "group": "test",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated",
+                "clear": true
+            },
+            "problemMatcher": ["$tsc"]
+        }
 	]
 }

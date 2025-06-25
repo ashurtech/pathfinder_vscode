@@ -117,13 +117,26 @@ export class HttpRequestExecutor {
 
             // Add authentication headers from environment config and credentials
             if (config.resolvedAuth && credentials) {
-                if (config.resolvedAuth.type === 'bearer' && credentials.apiKey) {
-                    mergedHeaders['Authorization'] = `Bearer ${credentials.apiKey}`;
-                } else if (config.resolvedAuth.type === 'apikey' && credentials.apiKey) {
-                    mergedHeaders['X-API-Key'] = credentials.apiKey;
-                } else if (config.resolvedAuth.type === 'basic' && credentials.username && credentials.password) {
-                    const authString = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
-                    mergedHeaders['Authorization'] = `Basic ${authString}`;
+                switch (config.resolvedAuth.type) {
+                    case 'bearer':
+                        if (credentials.apiKey) {
+                            mergedHeaders['Authorization'] = `Bearer ${credentials.apiKey}`;
+                        }
+                        break;
+                    
+                    case 'apikey':
+                        if (credentials.apiKey) {
+                            const keyName = config.resolvedAuth.apiKeyName ?? 'X-API-Key';
+                            mergedHeaders[keyName] = credentials.apiKey;
+                        }
+                        break;
+                    
+                    case 'basic':
+                        if (credentials.username && credentials.password) {
+                            const authString = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
+                            mergedHeaders['Authorization'] = `Basic ${authString}`;
+                        }
+                        break;
                 }
             }
 

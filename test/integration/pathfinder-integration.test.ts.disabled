@@ -1,0 +1,345 @@
+/**
+ * Realistic Integration Tests for Pathfinder Extension
+ * 
+ * These tests focus on real-world workflows and component integration:
+ * - Configuration management and persistence
+ * - Tree provider updates and consistency
+ * - Authentication resolution across the inheritance chain
+ * - Response handling for different content sizes
+ * - Code generation with proper environment context
+ */
+
+import * as vscode from 'vscode';
+import { ConfigurationManager } from '../../src/configuration';
+import { ApiTreeProvider } from '../../src/tree-provider';
+import { ResponseHandler } from '../../src/response-handler';
+import { CodeGenerationCommands } from '../../src/code-generation';
+import { ApiSchema, SchemaEnvironment, SchemaEnvironmentGroup } from '../../src/types';
+
+// Mock VS Code API
+jest.mock('vscode', () => ({
+    workspace: {
+        getConfiguration: jest.fn(() => ({
+            get: jest.fn(),
+            update: jest.fn()
+        }))
+    },
+    window: {
+        showInformationMessage: jest.fn(),
+        showErrorMessage: jest.fn()
+    },
+    Uri: {
+        parse: jest.fn((str: string) => ({ toString: () => str }))
+    },
+    commands: { executeCommand: jest.fn() },
+    NotebookCellOutput: jest.fn(),
+    NotebookCellOutputItem: {
+        text: jest.fn(),
+        json: jest.fn()
+    }
+}));
+
+describe('Pathfinder Integration Tests', () => {
+    let configManager: ConfigurationManager;
+    let treeProvider: ApiTreeProvider;
+    let extensionContext: vscode.ExtensionContext;
+
+    beforeEach(() => {
+        // Fresh context for each test
+        extensionContext = {
+            subscriptions: [],
+            workspaceState: {
+                get: jest.fn(() => undefined),
+                update: jest.fn(),
+                keys: jest.fn(() => [])
+            },
+            globalState: {
+                get: jest.fn(() => []),
+                update: jest.fn(),
+                keys: jest.fn(() => [])
+            },
+            secrets: {
+                get: jest.fn(),
+                store: jest.fn(),
+                delete: jest.fn(),
+                onDidChange: jest.fn()
+            }
+        } as any;
+
+        configManager = new ConfigurationManager(extensionContext);
+        treeProvider = new ApiTreeProvider(configManager, extensionContext);
+    });
+
+    describe('Schema and Environment Management', () => {
+        test('should handle complete schema-environment lifecycle', async () => {
+            // 1. Create and save a schema
+            const schema: ApiSchema = {
+                id: 'test-schema-' + Date.now(),
+                name: 'Test API',
+                version: '1.0.0',
+                spec: {
+                    openapi: '3.0.0',
+                    info: { title: 'Test API', version: '1.0.0' },
+                    paths: {
+                        '/users': { get: { summary: 'Get users' } }
+                    }
+                },
+                loadedAt: new Date(),
+                lastUpdated: new Date(),
+                platform: 'generic'
+            };
+
+            await configManager.saveApiSchema(schema);
+
+            // 2. Verify schema was saved
+            const schemas = await configManager.getApiSchemas();
+            const savedSchema = schemas.find(s => s.id === schema.id);
+            expect(savedSchema).toBeDefined();
+            expect(savedSchema!.name).toBe('Test API');
+
+            // 3. Create environment group
+            const group: SchemaEnvironmentGroup = {
+                id: 'test-group-' + Date.now(),
+                schemaId: schema.id,
+                name: 'Development',
+                authentication: {
+                    type: 'bearer',
+                    bearerToken: 'dev-token-123'
+                },
+                createdAt: new Date()
+            };
+
+            await configManager.saveSchemaEnvironmentGroup(group);
+
+            // 4. Create environment
+            const environment: SchemaEnvironment = {
+                id: 'test-env-' + Date.now(),
+                schemaId: schema.id,
+                groupId: group.id,
+                name: 'Dev Server',
+                baseUrl: 'https://api.dev.example.com',
+                authentication: { type: 'inherit' },
+                createdAt: new Date()
+            };
+
+            await configManager.saveSchemaEnvironment(environment);
+
+            // 5. Verify the complete structure
+            const groups = await configManager.getSchemaEnvironmentGroups(schema.id);
+            expect(groups).toHaveLength(1);
+            expect(groups[0].name).toBe('Development');
+
+            const environments = await configManager.getSchemaEnvironments(schema.id);
+            expect(environments).toHaveLength(1);
+            expect(environments[0].name).toBe('Dev Server');
+        });
+    });
+
+    describe('Authentication Inheritance', () => {
+        test('should resolve authentication through the inheritance chain', async () => {
+            const schemaId = 'auth-schema-' + Date.now();
+
+            // 1. Schema with default auth
+            const schema: ApiSchema = {
+                id: schemaId,
+                name: 'Auth Test',
+                version: '1.0.0',
+                spec: { openapi: '3.0.0', info: { title: 'Test', version: '1.0.0' } },
+                defaultAuthentication: {
+                    type: 'apiKey',
+                    apiKey: 'schema-key',
+                    apiKeyHeader: 'X-API-Key'
+                },
+                loadedAt: new Date(),
+                lastUpdated: new Date(),
+                platform: 'generic'
+            };
+
+            await configManager.saveApiSchema(schema);
+
+            // 2. Group with bearer token
+            const group: SchemaEnvironmentGroup = {
+                id: 'auth-group-' + Date.now(),
+                schemaId,
+                name: 'Auth Group',
+                authentication: {
+                    type: 'bearer',
+                    bearerToken: 'group-bearer-token'
+                },
+                createdAt: new Date()
+            };
+
+            await configManager.saveSchemaEnvironmentGroup(group);
+
+            // 3. Environment that inherits
+            const inheritingEnv: SchemaEnvironment = {
+                id: 'inheriting-' + Date.now(),
+                schemaId,
+                groupId: group.id,
+                name: 'Inheriting Env',
+                baseUrl: 'https://inherit.example.com',
+                authentication: { type: 'inherit' },
+                createdAt: new Date()
+            };
+
+            await configManager.saveSchemaEnvironment(inheritingEnv);
+
+            // 4. Environment with custom auth
+            const customEnv: SchemaEnvironment = {
+                id: 'custom-' + Date.now(),
+                schemaId,
+                groupId: group.id,
+                name: 'Custom Env',
+                baseUrl: 'https://custom.example.com',
+                authentication: {
+                    type: 'basic',
+                    username: 'admin',
+                    password: 'secret'
+                },
+                createdAt: new Date()
+            };
+
+            await configManager.saveSchemaEnvironment(customEnv);
+
+            // 5. Test inheritance resolution
+            const inheritedAuth = await configManager.resolveEnvironmentAuth(inheritingEnv);
+            expect(inheritedAuth.type).toBe('bearer');
+            expect(inheritedAuth.bearerToken).toBe('group-bearer-token');
+
+            const customAuth = await configManager.resolveEnvironmentAuth(customEnv);
+            expect(customAuth.type).toBe('basic');
+            expect(customAuth.username).toBe('admin');
+        });
+    });
+
+    describe('Response Handling', () => {
+        test('should truncate large responses and provide full view option', async () => {
+            // Create large response (>100KB)
+            const largeData = {
+                results: Array.from({ length: 3000 }, (_, i) => ({
+                    id: i,
+                    title: `Result ${i}`,
+                    content: `Sample content item ${i}`, // Make each item substantial
+                    metadata: {
+                        timestamp: new Date().toISOString(),
+                        tags: [`tag-${i % 10}`, `category-${i % 5}`]
+                    }
+                }))
+            };
+
+            const responseBody = JSON.stringify(largeData);
+            expect(responseBody.length).toBeGreaterThan(100000);
+
+            const mockUri = { toString: () => 'test:cell' } as vscode.Uri;
+            const output = await ResponseHandler.handleApiResponse(responseBody, mockUri);
+
+            expect(output.items).toHaveLength(1);
+            expect(output.items[0].mime).toBe('text/html');
+
+            const html = Buffer.from(output.items[0].data).toString();
+            expect(html).toContain('Response too large');
+            expect(html).toContain('Open Full Response');
+        });
+
+        test('should handle normal responses without truncation', async () => {
+            const normalData = {
+                users: [
+                    { id: 1, name: 'Alice' },
+                    { id: 2, name: 'Bob' }
+                ]
+            };
+
+            const responseBody = JSON.stringify(normalData);
+            const mockUri = { toString: () => 'test:cell' } as vscode.Uri;
+            const output = await ResponseHandler.handleApiResponse(responseBody, mockUri);
+
+            expect(output.items).toHaveLength(1);
+            expect(output.items[0].mime).toBe('application/json');
+        });
+    });
+
+    describe('Code Generation', () => {
+        test('should generate code with correct environment context', async () => {
+            const codeGen = new CodeGenerationCommands(extensionContext);
+
+            const endpoint = {
+                path: '/api/v1/users/{id}',
+                method: 'GET',
+                summary: 'Get user by ID',
+                parameters: [
+                    { name: 'id', in: 'path', required: true }
+                ]
+            };
+
+            const environment: SchemaEnvironment = {
+                id: 'test-env',
+                schemaId: 'test-schema',
+                name: 'Test Environment',
+                baseUrl: 'https://api.example.com',
+                authentication: {
+                    type: 'apiKey',
+                    apiKey: 'test-key-123',
+                    apiKeyHeader: 'Authorization'
+                },
+                createdAt: new Date()
+            };
+
+            const context = { endpoint, environment };
+
+            // Test cURL
+            const curl = await codeGen.generateCurl(context);
+            expect(curl).toContain('curl');
+            expect(curl).toContain('https://api.example.com/api/v1/users/{id}');
+            expect(curl).toContain('Authorization: test-key-123');
+
+            // Test Python
+            const python = await codeGen.generatePython(context);
+            expect(python).toContain('requests.get');
+            expect(python).toContain('https://api.example.com/api/v1/users/');
+            expect(python).toContain("'Authorization': 'test-key-123'");
+
+            // Test JavaScript
+            const js = await codeGen.generateJavaScript(context);
+            expect(js).toContain('fetch(');
+            expect(js).toContain('https://api.example.com/api/v1/users/');
+            expect(js).toContain('Authorization');
+        });
+    });
+
+    describe('Tree Provider Consistency', () => {
+        test('should maintain tree state across configuration changes', async () => {
+            // Get initial state
+            const initial = await treeProvider.getChildren();
+            const initialCount = initial.length;
+
+            // Add schema
+            const schema: ApiSchema = {
+                id: 'tree-schema-' + Date.now(),
+                name: 'Tree Schema',
+                version: '1.0.0',
+                spec: {
+                    openapi: '3.0.0',
+                    info: { title: 'Tree Test', version: '1.0.0' },
+                    paths: { '/test': { get: { summary: 'Test' } } }
+                },
+                loadedAt: new Date(),
+                lastUpdated: new Date(),
+                platform: 'generic'
+            };
+
+            await configManager.saveApiSchema(schema);
+            treeProvider.refresh();
+
+            // Verify tree updated
+            const updated = await treeProvider.getChildren();
+            expect(updated.length).toBe(initialCount + 1);
+
+            // Find schema item
+            const schemaItem = updated.find(item => 
+                item.label?.toString().includes('Tree Schema')
+            );
+            expect(schemaItem).toBeDefined();
+            expect(schemaItem!.contextValue).toBe('schema');
+        });
+    });
+});

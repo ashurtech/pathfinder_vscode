@@ -1,0 +1,433 @@
+/**
+ * Integration Test Suite for Pathfinder Extension
+ * 
+ * These tests validate complete workflows that span multiple components:
+ * - Schema loading → Environment creation → API testing
+ * - Tree provider → Code generation → HTTP execution
+ * - Authentication flow → Request execution → Response handling
+ */
+
+import * as vscode from 'vscode';
+import { ConfigurationManager } from '../../src/configuration';
+import { SchemaLoader } from '../../src/schema-loader';
+import { ApiTreeProvider } from '../../src/tree-provider';
+import { NotebookController } from '../../src/notebook';
+import { ResponseHandler } from '../../src/response-handler';
+import { CodeGenerationCommands } from '../../src/code-generation';
+
+describe('Pathfinder Integration Tests', () => {
+    let configManager: ConfigurationManager;
+    let schemaLoader: SchemaLoader;
+    let treeProvider: ApiTreeProvider;
+    let notebookController: NotebookController;
+    let extensionContext: vscode.ExtensionContext;
+
+    beforeAll(async () => {
+        // Setup test extension context
+        extensionContext = {
+            subscriptions: [],
+            workspaceState: new Map(),
+            globalState: new Map(),
+            secrets: {
+                get: jest.fn(),
+                store: jest.fn(),
+                delete: jest.fn(),
+                onDidChange: jest.fn()
+            }
+        } as any;
+
+        // Initialize core components
+        configManager = new ConfigurationManager(extensionContext);
+        schemaLoader = new SchemaLoader(configManager);
+        treeProvider = new ApiTreeProvider(configManager);
+        notebookController = new NotebookController(extensionContext, configManager);
+    });
+
+    describe('Complete Schema-to-API-Testing Workflow', () => {
+        test('should load schema, create environment, and execute API request', async () => {
+            // 1. Load a test schema
+            const testSchema = {
+                openapi: '3.0.0',
+                info: { title: 'Test API', version: '1.0.0' },
+                servers: [{ url: 'https://api.test.com' }],
+                paths: {
+                    '/users': {
+                        get: {
+                            summary: 'Get users',
+                            responses: {
+                                '200': {
+                                    description: 'Success',
+                                    content: {
+                                        'application/json': {
+                                            schema: {
+                                                type: 'array',
+                                                items: { type: 'object' }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            const schemaInfo = await schemaLoader.loadSchemaFromObject(testSchema, 'Test API');
+            expect(schemaInfo).toBeDefined();
+            expect(schemaInfo.id).toBeDefined();
+
+            // 2. Create environment group
+            const groupId = await configManager.addSchemaEnvironmentGroup({
+                schemaId: schemaInfo.id,
+                name: 'Test Group',
+                description: 'Test environment group',
+                authentication: {
+                    type: 'bearer',
+                    bearerToken: 'test-token'
+                }
+            });
+
+            expect(groupId).toBeDefined();
+
+            // 3. Create environment in the group
+            const envId = await configManager.addSchemaEnvironment({
+                schemaId: schemaInfo.id,
+                groupId: groupId,
+                name: 'Test Env',
+                baseUrl: 'https://api.test.com',
+                authentication: { type: 'inherit' }
+            });
+
+            expect(envId).toBeDefined();
+
+            // 4. Verify tree structure
+            const treeChildren = await treeProvider.getChildren();
+            expect(treeChildren).toHaveLength(1); // Should have the schema
+
+            const schemaItem = treeChildren[0];
+            const schemaChildren = await treeProvider.getChildren(schemaItem);
+            expect(schemaChildren.length).toBeGreaterThan(0); // Should have groups and endpoints
+
+            // 5. Test code generation
+            const endpoints = await configManager.getEndpointsForSchema(schemaInfo.id);
+            expect(endpoints).toHaveLength(1);
+
+            const codeGen = new CodeGenerationCommands();
+            const curlCode = await codeGen.generateCurl({
+                endpoint: endpoints[0],
+                environment: await configManager.getSchemaEnvironment(envId)
+            });
+
+            expect(curlCode).toContain('curl');
+            expect(curlCode).toContain('https://api.test.com/users');
+            expect(curlCode).toContain('Authorization: Bearer test-token');
+        });
+    });
+
+    describe('Authentication Flow Integration', () => {
+        test('should handle authentication inheritance chain', async () => {
+            // Test the Schema → Group → Environment auth inheritance
+            const schemaId = 'test-schema-auth';
+            
+            // 1. Create schema with default auth
+            await configManager.addSchema({
+                id: schemaId,
+                name: 'Auth Test Schema',
+                version: '1.0.0',
+                spec: { openapi: '3.0.0', info: { title: 'Test', version: '1.0.0' } },
+                defaultAuthentication: {
+                    type: 'apiKey',
+                    apiKey: 'schema-default-key',
+                    apiKeyHeader: 'X-API-Key'
+                }
+            });
+
+            // 2. Create group with override auth
+            const groupId = await configManager.addSchemaEnvironmentGroup({
+                schemaId,
+                name: 'Auth Group',
+                authentication: {
+                    type: 'bearer',
+                    bearerToken: 'group-token'
+                }
+            });
+
+            // 3. Create environment that inherits from group
+            const envId1 = await configManager.addSchemaEnvironment({
+                schemaId,
+                groupId,
+                name: 'Inheriting Env',
+                baseUrl: 'https://api1.test.com',
+                authentication: { type: 'inherit' }
+            });
+
+            // 4. Create environment with its own auth
+            const envId2 = await configManager.addSchemaEnvironment({
+                schemaId,
+                groupId,
+                name: 'Override Env',
+                baseUrl: 'https://api2.test.com',
+                authentication: {
+                    type: 'basic',
+                    username: 'testuser',
+                    password: 'testpass'
+                }
+            });
+
+            // 5. Test auth resolution
+            const env1 = await configManager.getSchemaEnvironment(envId1);
+            const env2 = await configManager.getSchemaEnvironment(envId2);
+
+            // Environment 1 should inherit group auth (bearer token)
+            const auth1 = await configManager.resolveEnvironmentAuthentication(env1);
+            expect(auth1.type).toBe('bearer');
+            expect(auth1.bearerToken).toBe('group-token');
+
+            // Environment 2 should use its own auth (basic)
+            const auth2 = await configManager.resolveEnvironmentAuthentication(env2);
+            expect(auth2.type).toBe('basic');
+            expect(auth2.username).toBe('testuser');
+        });
+    });
+
+    describe('HTTP Request Execution Integration', () => {
+        test('should execute request with proper authentication and response handling', async () => {
+            // Mock HTTP response
+            const mockResponse = {
+                status: 200,
+                statusText: 'OK',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                    users: [
+                        { id: 1, name: 'Alice' },
+                        { id: 2, name: 'Bob' }
+                    ]
+                })
+            };
+
+            // Mock HttpRequestExecutor
+            const mockExecutor = {
+                executeRequest: jest.fn().mockResolvedValue(mockResponse)
+            };
+
+            // Test notebook creation and execution
+            const endpoint = {
+                path: '/users',
+                method: 'GET',
+                summary: 'Get users',
+                operationId: 'getUsers'
+            };
+
+            const environment = {
+                id: 'test-env',
+                name: 'Test',
+                baseUrl: 'https://api.test.com',
+                authentication: {
+                    type: 'bearer',
+                    bearerToken: 'test-token'
+                }
+            };
+
+            // Create notebook
+            const notebook = await notebookController.createNotebookFromEndpoint(
+                endpoint,
+                'test-schema',
+                environment.id
+            );
+
+            expect(notebook).toBeDefined();
+            expect(notebook.cellCount).toBeGreaterThan(0);
+
+            // Verify notebook cells contain correct content
+            const cells = Array.from({ length: notebook.cellCount }, (_, i) => notebook.cellAt(i));
+            const httpCell = cells.find(cell => cell.document.languageId === 'http');
+            
+            expect(httpCell).toBeDefined();
+            expect(httpCell!.document.getText()).toContain('GET https://api.test.com/users');
+            expect(httpCell!.document.getText()).toContain('Authorization: Bearer test-token');
+        });
+    });
+
+    describe('Large Response Handling Integration', () => {
+        test('should handle large JSON responses with truncation and full view option', async () => {
+            // Create a large JSON response (>100KB)
+            const largeData = {
+                items: Array.from({ length: 5000 }, (_, i) => ({
+                    id: i,
+                    name: `Item ${i}`,
+                    description: `This is a detailed description for item ${i}`.repeat(10),
+                    metadata: {
+                        created: new Date().toISOString(),
+                        tags: [`tag${i % 10}`, `category${i % 5}`],
+                        properties: {
+                            prop1: `value${i}`,
+                            prop2: Math.random(),
+                            prop3: i % 2 === 0
+                        }
+                    }
+                }))
+            };            const responseBody = JSON.stringify(largeData);
+            expect(responseBody.length).toBeGreaterThan(100000); // Ensure it's > 100KB
+
+            // Test ResponseHandler with the actual object (not the stringified version)
+            const mockCellUri = vscode.Uri.parse('untitled:test-cell');
+            const output = await ResponseHandler.handleApiResponse(largeData, mockCellUri);
+
+            expect(output).toBeDefined();
+            expect(output.items).toHaveLength(1);
+
+            // Should create truncated HTML output with "Open Full Response" button
+            const outputItem = output.items[0];
+            expect(outputItem.mime).toBe('text/html');
+            
+            const htmlContent = Buffer.from(outputItem.data).toString();
+            expect(htmlContent).toContain('Response too large');
+            expect(htmlContent).toContain('Open Full Response');
+            expect(htmlContent).toContain('vscode.postMessage');
+        });
+    });
+
+    describe('Tree Provider Integration', () => {
+        test('should maintain consistent tree state across operations', async () => {
+            // 1. Start with empty tree
+            const initialChildren = await treeProvider.getChildren();
+            const initialCount = initialChildren.length;
+
+            // 2. Add schema
+            const schemaId = await configManager.addSchema({
+                id: 'tree-test-schema',
+                name: 'Tree Test Schema',
+                version: '1.0.0',
+                spec: {
+                    openapi: '3.0.0',
+                    info: { title: 'Test', version: '1.0.0' },
+                    paths: {
+                        '/endpoint1': { get: { summary: 'Endpoint 1' } },
+                        '/endpoint2': { post: { summary: 'Endpoint 2' } }
+                    }
+                }
+            });
+
+            // 3. Refresh and verify schema appears
+            treeProvider.refresh();
+            const afterSchemaChildren = await treeProvider.getChildren();
+            expect(afterSchemaChildren.length).toBe(initialCount + 1);
+
+            // 4. Add environment group
+            const groupId = await configManager.addSchemaEnvironmentGroup({
+                schemaId,
+                name: 'Test Group',
+                authentication: { type: 'none' }
+            });
+
+            // 5. Add environment
+            const envId = await configManager.addSchemaEnvironment({
+                schemaId,
+                groupId,
+                name: 'Test Environment',
+                baseUrl: 'https://test.com',
+                authentication: { type: 'inherit' }
+            });
+
+            // 6. Verify tree structure
+            const schemaItem = afterSchemaChildren.find(item => 
+                item.label?.toString().includes('Tree Test Schema')
+            );
+            expect(schemaItem).toBeDefined();
+
+            const schemaChildren = await treeProvider.getChildren(schemaItem);
+            expect(schemaChildren.length).toBeGreaterThan(0);
+
+            // Should have groups section and endpoints section
+            const groupsSection = schemaChildren.find(item => 
+                item.contextValue === 'schema-groups'
+            );
+            const endpointsSection = schemaChildren.find(item => 
+                item.contextValue === 'schema-endpoints'
+            );
+
+            expect(groupsSection).toBeDefined();
+            expect(endpointsSection).toBeDefined();
+
+            // 7. Test environment group children
+            const groupChildren = await treeProvider.getChildren(groupsSection);
+            expect(groupChildren.length).toBe(1); // Should have our test group
+
+            const groupItem = groupChildren[0];
+            const environmentChildren = await treeProvider.getChildren(groupItem);
+            expect(environmentChildren.length).toBe(1); // Should have our test environment
+        });
+    });
+
+    describe('Code Generation Integration', () => {
+        test('should generate consistent code across different formats', async () => {
+            const testEndpoint = {
+                path: '/users/{id}',
+                method: 'PUT',
+                summary: 'Update user',
+                parameters: [
+                    { name: 'id', in: 'path', required: true, schema: { type: 'string' } }
+                ],
+                requestBody: {
+                    content: {
+                        'application/json': {
+                            schema: {
+                                type: 'object',
+                                properties: {
+                                    name: { type: 'string' },
+                                    email: { type: 'string' }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+
+            const testEnvironment = {
+                id: 'code-test-env',
+                name: 'Code Test Environment',
+                baseUrl: 'https://api.example.com',
+                authentication: {
+                    type: 'apiKey',
+                    apiKey: 'test-api-key',
+                    apiKeyHeader: 'X-API-Key'
+                }
+            };
+
+            const codeGen = new CodeGenerationCommands();
+
+            // Test cURL generation
+            const curlCode = await codeGen.generateCurl({
+                endpoint: testEndpoint,
+                environment: testEnvironment
+            });
+
+            expect(curlCode).toContain('curl -X PUT');
+            expect(curlCode).toContain('https://api.example.com/users/{id}');
+            expect(curlCode).toContain('X-API-Key: test-api-key');
+            expect(curlCode).toContain('Content-Type: application/json');
+
+            // Test Python generation
+            const pythonCode = await codeGen.generatePython({
+                endpoint: testEndpoint,
+                environment: testEnvironment
+            });
+
+            expect(pythonCode).toContain('import requests');
+            expect(pythonCode).toContain('PUT');
+            expect(pythonCode).toContain('https://api.example.com/users/');
+            expect(pythonCode).toContain("'X-API-Key': 'test-api-key'");
+
+            // Test JavaScript generation
+            const jsCode = await codeGen.generateJavaScript({
+                endpoint: testEndpoint,
+                environment: testEnvironment
+            });
+
+            expect(jsCode).toContain('fetch(');
+            expect(jsCode).toContain('method: "PUT"');
+            expect(jsCode).toContain('https://api.example.com/users/');
+            expect(jsCode).toContain('X-API-Key');
+        });
+    });
+});
